@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+
+# Virtuelle Umgebungen
+venv/
+.venv/
+env/
+ENV/
+
+# Umgebungsvariablen
+.env
+.env.local
+.env.*.local
+
+# Portfolio-Dateien (niemals einchecken)
+*.portfolio
+
+# Multi-Source-Konfiguration (enthält reale Pfade/Namen) – nur .example tracken
+portfolios.json
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs
+*.log

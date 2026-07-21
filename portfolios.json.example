@@ -1,0 +1,14 @@
+[
+  {
+    "id": "example1",
+    "label": "Example1",
+    "path": "/data/portfolios/Example1.portfolio",
+    "password": null
+  },
+  {
+    "id": "example2",
+    "label": "Example2",
+    "path": "/data/portfolios/Example2.portfolio",
+    "password": null
+  }
+]

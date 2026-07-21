@@ -1,0 +1,53 @@
+services:
+  pp-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # UID/GID des Host-Users, der laut Synology-ACL Zugriff auf
+        # PP_HOST_PORTFOLIOS_DIR hat (Default passend zum eigenen NAS-Setup anpassen).
+        MCPUSER_UID: ${MCPUSER_UID:-1026}
+        MCPUSER_GID: ${MCPUSER_GID:-100}
+    container_name: pp-mcp-server
+    ports:
+      # Nur auf localhost der NAS gebunden (Debug/Direktzugriff von der NAS-Shell).
+      # Öffentliche Erreichbarkeit läuft über nginx-proxy-manager (Netzwerk "nginx"
+      # unten), nicht über einen weiteren Host-Port.
+      - "127.0.0.1:${MCP_SERVER_PORT:-8080}:8080"
+    volumes:
+      # Verzeichnis mit allen .portfolio-Dateien (read-only).
+      - "${PP_HOST_PORTFOLIOS_DIR:-/volume1/PortfolioPerformance}:/data/portfolios:ro"
+      # JSON-Config mit den konfigurierten Quellen (read-only).
+      - "${PP_HOST_PORTFOLIOS_CONFIG:-./portfolios.json}:/data/portfolios.json:ro"
+    environment:
+      - TZ=Europe/Berlin
+      - PP_PORTFOLIOS_CONFIG=/data/portfolios.json
+      - MCP_TRANSPORT=${MCP_TRANSPORT:-streamable-http}
+      # Pflicht in diesem Deployment (nicht im vertrauenswürdigen lokalen Mac-Netz) –
+      # Compose bricht ab, wenn die Variable fehlt oder leer ist.
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:?MCP_AUTH_TOKEN muss in .env gesetzt sein}
+      # Zusätzliche Absicherung auf Anwendungsebene: Server bricht auch beim
+      # direkten Start (ohne Compose) ohne gesetztes MCP_AUTH_TOKEN ab.
+      - MCP_REQUIRE_AUTH=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket,sys; s=socket.socket(); s.settimeout(2); sys.exit(s.connect_ex(('localhost',8080)))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - pp-mcp-net
+      - nginx
+
+networks:
+  # Gemeinsames internes Netzwerk für Backends, die pp-mcp ansprechen sollen
+  # (künftiges Dashboard-Backend, migriertes DividendenTracker-Backend).
+  pp-mcp-net:
+    external: true
+  # Netzwerk von nginx-proxy-manager – Voraussetzung, damit NPM pp-mcp per
+  # Containername (pp-mcp-server:8080) als Proxy-Ziel erreichen kann.
+  # Zugriff bleibt trotzdem nur über den per MCP_AUTH_TOKEN geschützten Endpunkt
+  # und den in NPM konfigurierten Host möglich.
+  nginx:
+    external: true
