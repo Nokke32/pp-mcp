@@ -1,0 +1,40 @@
+services:
+  pp-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pp-mcp-server
+    ports:
+      - "${MCP_SERVER_PORT:-8080}:8080"  # MCP-Server – Host-Port variabel, Container-Port fest 8080
+    volumes:
+      # Variante A (Default): eine einzelne Portfolio-Datei read-only mounten.
+      # Host-Pfad per PP_HOST_FILE in .env setzen (Default siehe unten).
+      - "${PP_HOST_FILE:-/path/to/your.portfolio}:/data/portfolio.portfolio:ro"
+      # Variante B (Multi-Source): Verzeichnis mit allen .portfolio-Dateien
+      # + JSON-Config read-only mounten. PP_PORTFOLIOS_CONFIG unten setzen und die
+      # Zeile für PP_HOST_FILE oben ggf. entfernen.
+      # - "${PP_HOST_PORTFOLIOS_DIR:-/path/to/portfolios}:/data/portfolios:ro"
+      # - "${PP_HOST_PORTFOLIOS_CONFIG:-./portfolios.json}:/data/portfolios.json:ro"
+    environment:
+      - TZ=Europe/Berlin
+      - PP_FILE_PATH=/data/portfolio.portfolio
+      - PP_PASSWORD=${PP_PASSWORD:-}
+      # Für Multi-Source (Variante B) setzen – hat Vorrang vor PP_FILE_PATH/PP_PASSWORD:
+      # - PP_PORTFOLIOS_CONFIG=/data/portfolios.json
+      - MCP_TRANSPORT=${MCP_TRANSPORT:-streamable-http}
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket,sys; s=socket.socket(); s.settimeout(2); sys.exit(s.connect_ex(('localhost',8080)))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Für Betrieb hinter einem gemeinsamen nginx-Proxy: Netzwerk aktivieren
+    # und die networks-Sektion unten einkommentieren.
+    # networks:
+    #   - nginx
+
+# networks:
+#   nginx:
+#     external: true
