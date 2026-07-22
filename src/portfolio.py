@@ -167,11 +167,24 @@ class Portfolio:
         return [_serialize({k: s.get(k) for k in keys}) for s in data["securities"]]
 
     # ---------------------------------------------------------------- Kurse
+    @staticmethod
+    def _describe_securities(securities: List[dict], limit: int = 10) -> str:
+        """Kurzbeschreibung ('Name (ISIN)') mehrerer Wertpapiere für Fehlermeldungen."""
+        parts = [
+            f"{s.get('name')} ({s.get('isin')})" if s.get("isin") else str(s.get("name"))
+            for s in securities[:limit]
+        ]
+        if len(securities) > limit:
+            parts.append(f"… ({len(securities) - limit} weitere)")
+        return ", ".join(parts)
+
     def _find_security(self, identifier: Optional[str]) -> dict:
         """Löst ein Wertpapier über Name, ISIN, WKN, Ticker oder UUID auf (case-insensitiv).
 
-        Liefert das rohe Security-Dict (inkl. prices/latest). Wirft ValueError,
-        wenn nichts oder nicht eindeutig gefunden wird.
+        Erst exakter Vergleich; liefert das nichts, Fallback auf Teilstring-Suche
+        (z.B. "Adidas" findet "Adidas AG"). Liefert das rohe Security-Dict (inkl.
+        prices/latest). Wirft ValueError mit Kandidatenliste, wenn nichts oder
+        nicht eindeutig gefunden wird.
         """
         data = self._ensure_loaded()
         if not identifier or not identifier.strip():
@@ -188,10 +201,21 @@ class Portfolio:
             or (s.get("wkn") or "").lower() == low
             or (s.get("tickerSymbol") or "").lower() == low
         ]
+        if not matches:
+            matches = [
+                s for s in data["securities"]
+                if low in (s.get("name") or "").lower()
+                or low in (s.get("isin") or "").lower()
+                or low in (s.get("wkn") or "").lower()
+                or low in (s.get("tickerSymbol") or "").lower()
+            ]
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
-            raise ValueError(f"Wertpapier '{identifier}' ist nicht eindeutig.")
+            raise ValueError(
+                f"Wertpapier '{identifier}' ist nicht eindeutig. "
+                f"Treffer: {self._describe_securities(matches)}"
+            )
         raise ValueError(f"Kein Wertpapier für '{identifier}' gefunden.")
 
     @staticmethod
