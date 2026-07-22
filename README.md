@@ -1,4 +1,4 @@
-*English | [Deutsch](README.de.md)*
+*English | [Deutsch](README_de.md)*
 
 # pp-mcp — MCP Server for Portfolio Performance
 
