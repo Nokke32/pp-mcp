@@ -149,6 +149,56 @@ python src/main.py
 For multi-source, set `PP_PORTFOLIOS_CONFIG=/path/to/portfolios.json` instead
 (takes precedence over `PP_FILE_PATH`/`PP_PASSWORD`).
 
+## Configuring in Claude
+
+`pp-mcp` speaks `streamable-http`, not stdio, so it's configured as a remote/HTTP
+MCP server. The endpoint is `http://<host>:<port>/mcp` (`/sse` if `MCP_TRANSPORT=sse`).
+
+**Claude Code** — via CLI:
+
+```bash
+claude mcp add --transport http pp-mcp http://localhost:8080/mcp \
+  --header "Authorization: Bearer <MCP_AUTH_TOKEN>"
+```
+
+Omit `--header` if `MCP_AUTH_TOKEN` is empty. This writes to `~/.claude.json`
+(user scope) or, with `--scope project`, to `.mcp.json` in the current project.
+Equivalently, edit the file directly:
+
+```json
+{
+  "mcpServers": {
+    "pp-mcp": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer <MCP_AUTH_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+Drop the `headers` block entirely if no auth token is configured.
+
+**Claude Desktop** currently only launches local stdio servers, not remote
+`streamable-http` ones directly — point it at `pp-mcp` via a stdio-to-HTTP bridge such
+as [`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
+
+```json
+{
+  "mcpServers": {
+    "pp-mcp": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote", "http://localhost:8080/mcp",
+        "--header", "Authorization: Bearer <MCP_AUTH_TOKEN>"
+      ]
+    }
+  }
+}
+```
+
 ## Switching the portfolio file (macOS)
 
 If you manage multiple `.portfolio` files, `switch-portfolio.sh` lets you quickly
