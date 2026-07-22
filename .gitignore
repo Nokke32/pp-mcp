@@ -24,6 +24,11 @@ ENV/
 # Multi-Source-Konfiguration (enthält reale Pfade/Namen) – nur .example tracken
 portfolios.json
 
+# CLAUDE.md enthaelt interne Pfade/Domains, wird separat per
+# sync-claude-md.sh direkt auf Gitea gepflegt (nicht ueber git-Commits,
+# damit sie nie ueber main -> github-main auf GitHub landen kann)
+CLAUDE.md
+
 # IDE / OS
 .idea/
 .vscode/
