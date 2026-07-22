@@ -183,7 +183,11 @@ Ohne Auth-Token den `headers`-Block einfach ganz weglassen.
 
 **Claude Desktop** startet aktuell nur lokale stdio-Server, keine entfernten
 `streamable-http`-Server direkt — dafür `pp-mcp` über eine stdio-zu-HTTP-Bridge wie
-[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) einbinden:
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) einbinden. Die Konfigurationsdatei
+liegt unter:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
