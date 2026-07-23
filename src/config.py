@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # docker-compose.yml) auf true setzen.
     MCP_REQUIRE_AUTH: bool = Field(default=False, env="MCP_REQUIRE_AUTH")
 
+    # Log-Level für Python-Logging und uvicorn (DEBUG/INFO/WARNING/ERROR/CRITICAL).
+    LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
