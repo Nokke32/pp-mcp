@@ -29,6 +29,7 @@ services:
       # Zusätzliche Absicherung auf Anwendungsebene: Server bricht auch beim
       # direkten Start (ohne Compose) ohne gesetztes MCP_AUTH_TOKEN ab.
       - MCP_REQUIRE_AUTH=true
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import socket,sys; s=socket.socket(); s.settimeout(2); sys.exit(s.connect_ex(('localhost',8080)))"]

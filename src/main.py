@@ -8,8 +8,14 @@ import uvicorn
 
 from src.config import settings
 
+_log_level_name = settings.LOG_LEVEL.strip().upper()
+_log_level = getattr(logging, _log_level_name, None)
+if not isinstance(_log_level, int):
+    _log_level = logging.INFO
+    _log_level_name = "INFO"
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=_log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -44,7 +50,7 @@ def main() -> None:
         build_mcp_asgi_app(transport),
         host=settings.MCP_SERVER_HOST,
         port=settings.MCP_SERVER_PORT,
-        log_level="info",
+        log_level=_log_level_name.lower(),
     )
 
 
