@@ -17,6 +17,10 @@ services:
       # - "${PP_HOST_PORTFOLIOS_CONFIG:-./portfolios.json}:/data/portfolios.json:ro"
     environment:
       - TZ=Europe/Berlin
+      # Must stay 0.0.0.0 inside the container – otherwise the port mapping
+      # above can't reach it. The app's own default is 127.0.0.1 (least
+      # exposure for non-Docker runs).
+      - MCP_SERVER_HOST=0.0.0.0
       - PP_FILE_PATH=/data/portfolio.portfolio
       - PP_PASSWORD=${PP_PASSWORD:-}
       # Set for multi-source (variant B) – takes precedence over PP_FILE_PATH/PP_PASSWORD:

@@ -26,8 +26,10 @@ class Settings(BaseSettings):
     # If set, this takes precedence over PP_FILE_PATH/PP_PASSWORD.
     PP_PORTFOLIOS_CONFIG: str = Field(default="", env="PP_PORTFOLIOS_CONFIG")
 
-    # MCP server – container port is fixed at 8080
-    MCP_SERVER_HOST: str = "0.0.0.0"
+    # MCP server – container port is fixed at 8080. Default binds to localhost
+    # only (least exposure); Docker deployments must override to 0.0.0.0 (see
+    # docker-compose*.yml) so the container is reachable via the port mapping.
+    MCP_SERVER_HOST: str = Field(default="127.0.0.1", env="MCP_SERVER_HOST")
     MCP_SERVER_PORT: int = 8080
     MCP_TRANSPORT: str = Field(default="streamable-http", env="MCP_TRANSPORT")
     # Optional bearer token to protect the HTTP endpoints. Empty = no
