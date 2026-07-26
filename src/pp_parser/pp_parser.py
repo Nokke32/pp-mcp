@@ -17,8 +17,8 @@ except ImportError:
         from Cryptodome.Util.Padding import unpad
         from Cryptodome.Hash import SHA1
     except ImportError:
-        raise ImportError("Zusatzbibliothek 'pycryptodome' oder 'pycryptodomex' wurde nicht gefunden. "
-                          "Bitte installiere sie mit 'pip install pycryptodome'.")
+        raise ImportError("Additional library 'pycryptodome' or 'pycryptodomex' was not found. "
+                          "Please install it with 'pip install pycryptodome'.")
 
 # Import generated protobuf classes
 import sys
@@ -35,29 +35,29 @@ SALT_LENGTH = 16
 KEY_LENGTH = 32
 ITERATIONS = 100000
 
-# Portfolio Performance speichert Kurse (Quotes) skaliert mit 10^8.
+# Portfolio Performance stores prices (quotes) scaled by 10^8.
 QUOTE_FACTOR = Decimal(10) ** 8
 
 def from_decimal_value(pdv) -> Decimal:
-    """Konvertiert PDecimalValue in Decimal."""
+    """Converts a PDecimalValue to Decimal."""
     if not pdv.value:
         return Decimal(0)
     unscaled = int.from_bytes(pdv.value, byteorder='big', signed=True)
     return Decimal(unscaled) / Decimal(10 ** pdv.scale)
 
 def from_epoch_day(epoch_day: int) -> datetime.date:
-    """Konvertiert Epoch Day in datetime.date."""
+    """Converts an epoch day to datetime.date."""
     # Java (and PP) use epoch day 1970-01-01
     # Python date.fromordinal(1) is 0001-01-01
     # The offset between 0001-01-01 and 1970-01-01 is 719163 days
     return datetime.date.fromordinal(epoch_day + 719163)
 
 def from_timestamp(ts) -> datetime.datetime:
-    """Konvertiert google.protobuf.Timestamp in datetime."""
+    """Converts a google.protobuf.Timestamp to datetime."""
     return datetime.datetime.fromtimestamp(ts.seconds + ts.nanos / 1e9, tz=datetime.timezone.utc)
 
 def from_local_date_time(pldt) -> datetime.datetime:
-    """Konvertiert PLocalDateTime in datetime."""
+    """Converts a PLocalDateTime to datetime."""
     date = from_epoch_day(pldt.epoch_day)
     time = datetime.time(
         pldt.second_of_day // 3600,
@@ -67,9 +67,9 @@ def from_local_date_time(pldt) -> datetime.datetime:
     return datetime.datetime.combine(date, time)
 
 def decrypt_portfolio(data: bytes, password: str) -> bytes:
-    """Entschlüsselt eine AES-verschlüsselte Portfolio-Datei."""
+    """Decrypts an AES-encrypted portfolio file."""
     if not data.startswith(b"PORTFOLIO"):
-        raise ValueError("Keine gültige verschlüsselte Portfolio-Datei (Signatur fehlt)")
+        raise ValueError("Not a valid encrypted portfolio file (signature missing)")
 
     method = data[9] # 0 = AES128, 1 = AES256
     iv = data[10:26]
@@ -77,7 +77,7 @@ def decrypt_portfolio(data: bytes, password: str) -> bytes:
 
     key_len = 16 if method == 0 else 32
 
-    # Hartcodierter Salt (signed bytes in Java -> unsigned in Python)
+    # Hardcoded salt (signed bytes in Java -> unsigned in Python)
     # [112, 67, 103, 107, -92, -125, -112, -95, -97, -114, 117, -56, -53, -69, -25, -28]
     salt = bytes([112, 67, 103, 107, 164, 131, 144, 161, 159, 142, 117, 200, 203, 187, 231, 228])
 
@@ -95,44 +95,44 @@ def decrypt_portfolio(data: bytes, password: str) -> bytes:
     zip_data = decrypted[8:]
 
     if content_type != 2:
-        raise ValueError(f"Unerwarteter Content-Type nach Entschlüsselung: {content_type} (erwartet 2 für Protobuf)")
+        raise ValueError(f"Unexpected content type after decryption: {content_type} (expected 2 for protobuf)")
 
     return zip_data
 
 def get_protobuf_from_zip(zip_bytes: bytes) -> bytes:
-    """Extrahiert die Protobuf-Daten aus einem ZIP-Container."""
+    """Extracts the protobuf data from a ZIP container."""
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         if "data.portfolio" in zf.namelist():
             data = zf.read("data.portfolio")
         elif "data" in zf.namelist():
             data = zf.read("data")
         else:
-            raise ValueError("Keine 'data.portfolio' oder 'data' Datei im ZIP-Container gefunden")
+            raise ValueError("No 'data.portfolio' or 'data' file found in the ZIP container")
 
     if data.startswith(b"PPPBV1"):
         return data[6:]
     return data
 
 def parse_portfolio_file(filepath: str, password: str = None) -> dict:
-    """Liest eine .portfolio-Datei (XML oder Binär) und gibt ein Dict zurück."""
+    """Reads a .portfolio file (XML or binary) and returns a dict."""
     with open(filepath, "rb") as f:
         header = f.read(9)
         f.seek(0)
         file_data = f.read()
 
     if header.startswith(b"PK\x03\x04"):
-        # Unverschlüsseltes ZIP
+        # Unencrypted ZIP
         proto_bytes = get_protobuf_from_zip(file_data)
     elif header.startswith(b"PORTFOLIO"):
-        # Verschlüsselt
+        # Encrypted
         if not password:
-            raise ValueError("Datei ist verschlüsselt, aber kein Passwort angegeben")
+            raise ValueError("File is encrypted, but no password was provided")
         zip_data = decrypt_portfolio(file_data, password)
         proto_bytes = get_protobuf_from_zip(zip_data)
     elif header.startswith(b"<?xml"):
-        raise ValueError("XML-Format wird von diesem Parser (noch) nicht unterstützt. Bitte XML-Parser verwenden.")
+        raise ValueError("XML format is not (yet) supported by this parser. Please use an XML parser.")
     else:
-        raise ValueError("Unbekanntes Dateiformat")
+        raise ValueError("Unknown file format")
 
     client = client_pb2.PClient()
     client.ParseFromString(proto_bytes)
@@ -171,8 +171,8 @@ def parse_portfolio_file(filepath: str, password: str = None) -> dict:
                 "date": from_epoch_day(p.date),
                 "close": Decimal(p.close) / QUOTE_FACTOR
             })
-        # Aktuellster Kurs (separates Feld in PP, oft neuer als der letzte Historien-Kurs).
-        # high/low/volume sind -1 bzw. 0, wenn nicht vorhanden.
+        # Most recent price (a separate field in PP, often newer than the last historical price).
+        # high/low/volume are -1 or 0, respectively, when not present.
         if s.HasField("latest"):
             L = s.latest
             sec_dict["latest"] = {
@@ -190,7 +190,7 @@ def parse_portfolio_file(filepath: str, password: str = None) -> dict:
                 "details": e.details,
             }
             if e.type == client_pb2.PSecurityEvent.DIVIDEND_PAYMENT and len(e.data) >= 3:
-                # data[0].int64 = Zahlungsdatum, data[1].string = Währung, data[2].int64 = Betrag
+                # data[0].int64 = payment date, data[1].string = currency, data[2].int64 = amount
                 event_dict["paymentDate"] = from_epoch_day(e.data[0].int64)
                 event_dict["currencyCode"] = e.data[1].string
                 event_dict["amount"] = Decimal(e.data[2].int64) / 100
@@ -244,7 +244,7 @@ def parse_portfolio_file(filepath: str, password: str = None) -> dict:
             trans_dict["units"].append(unit_dict)
         result["transactions"].append(trans_dict)
 
-    # Taxonomien (Klassifikationsbäume, z.B. Anlageklassen, Regionen, Branchen)
+    # Taxonomies (classification trees, e.g. asset classes, regions, industries)
     for tax in client.taxonomies:
         classifications = []
         for c in tax.classifications:
@@ -271,7 +271,7 @@ def parse_portfolio_file(filepath: str, password: str = None) -> dict:
             "classifications": classifications,
         })
 
-    # Sparpläne / Investmentpläne
+    # Savings plans / investment plans
     for p in client.plans:
         result["plans"].append({
             "name": p.name,
