@@ -1,11 +1,11 @@
-"""Datenzugriff auf die Portfolio-Performance-Datei.
+"""Data access for the Portfolio Performance file.
 
-Kapselt den (vendorierten) Parser und bietet:
-- einen mtime-basierten Cache, damit die Datei nur bei Änderung neu geparst wird,
-- Auflösung von Konto-/Depot-/Wertpapier-Namen auf UUIDs (und umgekehrt),
-- Anreicherung der Transaktionen mit lesbaren Namen,
-- Filter- und Aggregations-Funktionen für Reports,
-- JSON-sichere Serialisierung (Decimal -> str, Datum -> ISO-String).
+Wraps the (vendored) parser and provides:
+- an mtime-based cache so the file is only re-parsed when it changes,
+- resolution of account/portfolio/security names to UUIDs (and vice versa),
+- enrichment of transactions with readable names,
+- filter and aggregation functions for reports,
+- JSON-safe serialization (Decimal -> str, date -> ISO string).
 """
 import json
 import os
@@ -20,7 +20,7 @@ from src.pp_parser import parse_portfolio_file
 from src.price_feed import fetch_ariva_prices, is_safe_url, ALLOWED_HOSTS
 
 
-# Alle bekannten Transaktionstypen (aus client.proto, PTransaction.Type)
+# All known transaction types (from client.proto, PTransaction.Type)
 TRANSACTION_TYPES = [
     "PURCHASE",
     "SALE",
@@ -39,7 +39,7 @@ TRANSACTION_TYPES = [
 
 
 def _serialize(value: Any) -> Any:
-    """Wandelt Decimal/Datum rekursiv in JSON-sichere Typen um."""
+    """Recursively converts Decimal/date values into JSON-safe types."""
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, (datetime.datetime, datetime.date)):
@@ -52,36 +52,36 @@ def _serialize(value: Any) -> Any:
 
 
 class PortfolioNotConfigured(Exception):
-    """Wird ausgelöst, wenn kein gültiger Dateipfad konfiguriert ist."""
+    """Raised when no valid file path is configured."""
 
 
 class Portfolio:
-    """Cache-Wrapper um die Portfolio-Datei mit mtime-Invalidierung."""
+    """Cache wrapper around the portfolio file with mtime invalidation."""
 
     def __init__(self, file_path: str, password: Optional[str] = None):
         self.file_path = file_path
         self.password = password or None
         self._data: Optional[dict] = None
         self._mtime: Optional[float] = None
-        # Lookup-Maps uuid -> name
+        # Lookup maps uuid -> name
         self._account_names: Dict[str, str] = {}
         self._portfolio_names: Dict[str, str] = {}
         self._security_names: Dict[str, str] = {}
         self._security_isins: Dict[str, Optional[str]] = {}
-        # Temporärer Preis-Overlay (uuid -> zusätzliche {date, close}-Einträge),
-        # von refresh_prices befüllt. Nie in die Datei geschrieben, wird bei
-        # jedem echten Neuladen der Datei (mtime-Änderung) verworfen.
+        # Temporary price overlay (uuid -> additional {date, close} entries),
+        # populated by refresh_prices. Never written back to the file; it is
+        # discarded on every real reload of the file (mtime change).
         self._price_overlay: Dict[str, List[Dict[str, Any]]] = {}
 
-    # ---------------------------------------------------------------- laden
+    # ---------------------------------------------------------------- loading
     def _ensure_loaded(self) -> dict:
-        """Lädt/parst die Datei neu, falls sie sich seit dem letzten Mal geändert hat."""
+        """(Re-)loads/parses the file if it has changed since last time."""
         if not self.file_path:
             raise PortfolioNotConfigured(
-                "PP_FILE_PATH ist nicht gesetzt. Bitte den Pfad zur .portfolio-Datei konfigurieren."
+                "PP_FILE_PATH is not set. Please configure the path to the .portfolio file."
             )
         if not os.path.exists(self.file_path):
-            raise FileNotFoundError(f"Portfolio-Datei nicht gefunden: {self.file_path}")
+            raise FileNotFoundError(f"Portfolio file not found: {self.file_path}")
 
         mtime = os.path.getmtime(self.file_path)
         if self._data is None or mtime != self._mtime:
@@ -92,39 +92,39 @@ class Portfolio:
         return self._data
 
     def _build_indexes(self) -> None:
-        """Baut die UUID->Name Lookups nach dem Parsen neu auf."""
+        """Rebuilds the UUID->name lookups after parsing."""
         assert self._data is not None
         self._account_names = {a["uuid"]: a["name"] for a in self._data["accounts"]}
         self._portfolio_names = {p["uuid"]: p["name"] for p in self._data["portfolios"]}
         self._security_names = {s["uuid"]: s["name"] for s in self._data["securities"]}
         self._security_isins = {s["uuid"]: s.get("isin") for s in self._data["securities"]}
 
-    # ------------------------------------------------------------- auflösen
+    # ------------------------------------------------------------- resolving
     @staticmethod
     def _resolve(identifier: Optional[str], entries: List[dict]) -> Optional[str]:
-        """Löst einen Bezeichner (UUID oder Name, case-insensitiv) auf eine UUID auf.
+        """Resolves an identifier (UUID or name, case-insensitive) to a UUID.
 
-        Gibt None zurück, wenn kein Bezeichner angegeben wurde. Wirft ValueError,
-        wenn der Bezeichner nicht eindeutig zugeordnet werden kann.
+        Returns None if no identifier was given. Raises ValueError if the
+        identifier cannot be resolved unambiguously.
         """
         if not identifier:
             return None
         ident = identifier.strip()
-        # Direkter UUID-Treffer
+        # Direct UUID match
         for e in entries:
             if e["uuid"] == ident:
                 return e["uuid"]
-        # Case-insensitiver Namensvergleich
+        # Case-insensitive name comparison
         matches = [e for e in entries if e["name"].lower() == ident.lower()]
         if len(matches) == 1:
             return matches[0]["uuid"]
         if len(matches) > 1:
-            raise ValueError(f"Bezeichner '{identifier}' ist nicht eindeutig.")
-        raise ValueError(f"Kein Eintrag für '{identifier}' gefunden.")
+            raise ValueError(f"Identifier '{identifier}' is not unique.")
+        raise ValueError(f"No entry found for '{identifier}'.")
 
-    # ---------------------------------------------------------- öffentliche API
+    # ---------------------------------------------------------- public API
     def file_info(self) -> Dict[str, Any]:
-        """Metadaten und Kennzahlen zur konfigurierten Datei."""
+        """Metadata and metrics about the configured file."""
         data = self._ensure_loaded()
         with open(self.file_path, "rb") as f:
             header = f.read(9)
@@ -162,33 +162,33 @@ class Portfolio:
 
     def list_securities(self) -> List[Dict[str, Any]]:
         data = self._ensure_loaded()
-        # Preise/Events sind für Report-Übersichten zu umfangreich -> weglassen
+        # Prices/events are too extensive for report overviews -> omit them
         keys = ("uuid", "name", "isin", "wkn", "tickerSymbol", "currencyCode", "isRetired")
         return [_serialize({k: s.get(k) for k in keys}) for s in data["securities"]]
 
-    # ---------------------------------------------------------------- Kurse
+    # ---------------------------------------------------------------- prices
     @staticmethod
     def _describe_securities(securities: List[dict], limit: int = 10) -> str:
-        """Kurzbeschreibung ('Name (ISIN)') mehrerer Wertpapiere für Fehlermeldungen."""
+        """Short description ('Name (ISIN)') of several securities for error messages."""
         parts = [
             f"{s.get('name')} ({s.get('isin')})" if s.get("isin") else str(s.get("name"))
             for s in securities[:limit]
         ]
         if len(securities) > limit:
-            parts.append(f"… ({len(securities) - limit} weitere)")
+            parts.append(f"… ({len(securities) - limit} more)")
         return ", ".join(parts)
 
     def _find_security(self, identifier: Optional[str]) -> dict:
-        """Löst ein Wertpapier über Name, ISIN, WKN, Ticker oder UUID auf (case-insensitiv).
+        """Resolves a security by name, ISIN, WKN, ticker, or UUID (case-insensitive).
 
-        Erst exakter Vergleich; liefert das nichts, Fallback auf Teilstring-Suche
-        (z.B. "Adidas" findet "Adidas AG"). Liefert das rohe Security-Dict (inkl.
-        prices/latest). Wirft ValueError mit Kandidatenliste, wenn nichts oder
-        nicht eindeutig gefunden wird.
+        First tries an exact match; if that yields nothing, falls back to a
+        substring search (e.g. "Adidas" finds "Adidas AG"). Returns the raw
+        security dict (including prices/latest). Raises ValueError with a
+        candidate list if nothing or no unambiguous match is found.
         """
         data = self._ensure_loaded()
         if not identifier or not identifier.strip():
-            raise ValueError("Kein Wertpapier angegeben.")
+            raise ValueError("No security specified.")
         ident = identifier.strip()
         for s in data["securities"]:
             if s["uuid"] == ident:
@@ -213,21 +213,21 @@ class Portfolio:
             return matches[0]
         if len(matches) > 1:
             raise ValueError(
-                f"Wertpapier '{identifier}' ist nicht eindeutig. "
-                f"Treffer: {self._describe_securities(matches)}"
+                f"Security '{identifier}' is not unique. "
+                f"Matches: {self._describe_securities(matches)}"
             )
-        raise ValueError(f"Kein Wertpapier für '{identifier}' gefunden.")
+        raise ValueError(f"No security found for '{identifier}'.")
 
     @staticmethod
     def _security_meta(s: dict) -> Dict[str, Any]:
-        """Identifizierende Stammdaten eines Wertpapiers (ohne Kursreihen)."""
+        """Identifying master data of a security (without price series)."""
         return {k: s.get(k) for k in ("uuid", "name", "isin", "wkn", "tickerSymbol", "currencyCode")}
 
     def _effective_prices(self, s: dict) -> List[Dict[str, Any]]:
-        """Echte Kurse der Datei plus temporärer Preis-Overlay (`refresh_prices`).
+        """Actual prices from the file plus the temporary price overlay (`refresh_prices`).
 
-        Der Overlay ergänzt nur Datumswerte, die in der Datei fehlen – echte
-        Datei-Einträge werden nie überschrieben.
+        The overlay only adds dates missing from the file – actual file
+        entries are never overwritten.
         """
         prices = s.get("prices", [])
         overlay = self._price_overlay.get(s["uuid"])
@@ -238,9 +238,9 @@ class Portfolio:
         return prices + extra if extra else prices
 
     def _newest_price(self, s: dict) -> Optional[Dict[str, Any]]:
-        """Aktuellster Kurs eines Wertpapiers: das jüngere von latest-Feld und
-        jüngstem Historien-/Overlay-Kurs. Gibt None zurück, wenn keine Kursdaten
-        vorliegen."""
+        """Most recent price of a security: the newer of the latest field and
+        the most recent historical/overlay price. Returns None if no price
+        data is available."""
         candidates = []
         latest = s.get("latest")
         if latest and latest.get("close") is not None:
@@ -254,12 +254,12 @@ class Portfolio:
         return max(candidates, key=lambda p: p["date"])
 
     def latest_price(self, security: str) -> Dict[str, Any]:
-        """Aktuellster bekannter Kurs eines Wertpapiers."""
+        """Most recently known price of a security."""
         s = self._find_security(security)
         meta = self._security_meta(s)
         price = self._newest_price(s)
         if price is None:
-            return _serialize({**meta, "price": None, "message": "Keine Kursdaten vorhanden."})
+            return _serialize({**meta, "price": None, "message": "No price data available."})
         return _serialize({**meta, **price})
 
     def price_history(
@@ -269,10 +269,11 @@ class Portfolio:
         date_to: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Historische Tagesschlusskurse im Zeitraum (inklusive Grenzen), nach Datum sortiert.
+        """Historical daily closing prices within the period (inclusive of both bounds), sorted by date.
 
-        Ohne Zeitraum werden alle Kurse geliefert – das können mehrere tausend sein.
-        Mit `limit` werden nur die letzten N Kurse des Zeitraums zurückgegeben.
+        Without a period, all prices are returned – this can be several
+        thousand entries. With `limit`, only the last N prices of the period
+        are returned.
         """
         s = self._find_security(security)
         df = datetime.date.fromisoformat(date_from) if date_from else None
@@ -294,7 +295,7 @@ class Portfolio:
         })
 
     def price_on(self, security: str, date: str) -> Dict[str, Any]:
-        """Kurs zu einem Stichtag: exakt oder – falls kein Kurs am Tag – der letzte davor."""
+        """Price on a given date: exact match, or – if there's no price on that day – the last one before it."""
         s = self._find_security(security)
         target = datetime.date.fromisoformat(date)
         candidates = [p for p in self._effective_prices(s) if p["date"] <= target]
@@ -302,7 +303,7 @@ class Portfolio:
         if not candidates:
             return _serialize({
                 **meta, "requestedDate": date, "date": None, "close": None,
-                "message": "Kein Kurs an oder vor dem Stichtag vorhanden.",
+                "message": "No price available on or before the requested date.",
             })
         best = max(candidates, key=lambda p: p["date"])
         return _serialize({
@@ -314,7 +315,7 @@ class Portfolio:
         })
 
     def list_latest_prices(self) -> List[Dict[str, Any]]:
-        """Aktuellster Kurs aller Wertpapiere – Übersicht für Depot-Reports."""
+        """Most recent price of all securities – overview for portfolio reports."""
         data = self._ensure_loaded()
         result = []
         for s in data["securities"]:
@@ -328,7 +329,7 @@ class Portfolio:
         return _serialize(result)
 
     def list_price_feeds(self) -> List[Dict[str, Any]]:
-        """Kurs-Update-Konfiguration (Feed-Typ + URL) aller aktiven Wertpapiere."""
+        """Price update configuration (feed type + URL) of all active securities."""
         data = self._ensure_loaded()
         result = [
             {
@@ -346,11 +347,11 @@ class Portfolio:
         return _serialize(result)
 
     def refresh_prices(self, security: Optional[str] = None) -> Dict[str, Any]:
-        """Ruft fehlende, aktuellere Kurse über den konfigurierten Feed ab und legt
-        sie im temporären Preis-Overlay ab (siehe `_effective_prices`). Verändert
-        die .portfolio-Datei nicht. Aktuell wird nur der Feed-Typ
-        GENERIC_HTML_TABLE mit ariva.de-Host unterstützt; andere Feeds (PP, YAHOO, ...)
-        werden übersprungen und nicht als Fehler gewertet.
+        """Fetches missing, newer prices via the configured feed and stores
+        them in the temporary price overlay (see `_effective_prices`). Does
+        not modify the .portfolio file. Currently only the feed type
+        GENERIC_HTML_TABLE with an ariva.de host is supported; other feeds
+        (PP, YAHOO, ...) are skipped and not treated as errors.
         """
         data = self._ensure_loaded()
         if security:
@@ -368,11 +369,11 @@ class Portfolio:
             feed = s.get("feed")
             feed_url = s.get("feedURL")
             if feed != "GENERIC_HTML_TABLE" or not feed_url:
-                skipped.append({"uuid": uuid, "name": name, "reason": f"Feed-Typ '{feed}' wird nicht unterstützt."})
+                skipped.append({"uuid": uuid, "name": name, "reason": f"Feed type '{feed}' is not supported."})
                 continue
             hostname = urlparse(feed_url).hostname
             if not hostname or hostname.lower() not in ALLOWED_HOSTS:
-                skipped.append({"uuid": uuid, "name": name, "reason": "Feed-URL ist keine unterstützte ariva.de-Adresse."})
+                skipped.append({"uuid": uuid, "name": name, "reason": "Feed URL is not a supported ariva.de address."})
                 continue
             try:
                 fetched = fetch_ariva_prices(feed_url)
@@ -386,9 +387,9 @@ class Portfolio:
 
         return _serialize({"refreshed": refreshed, "skipped": skipped, "errors": errors})
 
-    # ------------------------------------------------------- Bestand / Bewertung
-    # Transaktionstypen, die die Stückzahl in einem Depot verändern (mit Vorzeichen).
-    # SECURITY_TRANSFER wird gesondert behandelt (Quelle -, Ziel +).
+    # ------------------------------------------------------- holdings / valuation
+    # Transaction types that change the share count in a portfolio (with sign).
+    # SECURITY_TRANSFER is handled separately (source -, target +).
     _SHARE_SIGN = {
         "PURCHASE": Decimal(1),
         "INBOUND_DELIVERY": Decimal(1),
@@ -397,9 +398,9 @@ class Portfolio:
     }
 
     def _price_asof(self, s: dict, target: Optional[datetime.date]):
-        """Kurs eines Wertpapiers zum Stichtag (oder aktuellster, wenn target None).
+        """Price of a security as of a given date (or the most recent one, if target is None).
 
-        Liefert (close, date, source). source: on_date | historical | latest | None.
+        Returns (close, date, source). source: on_date | historical | latest | None.
         """
         if target is None:
             p = self._newest_price(s)
@@ -416,11 +417,11 @@ class Portfolio:
     def _share_balances(
         self, portfolio_uuid: Optional[str], as_of: Optional[datetime.date]
     ) -> Dict[str, Decimal]:
-        """Stückzahl je Wertpapier-UUID bis einschließlich `as_of` (oder gesamt).
+        """Share count per security UUID up to and including `as_of` (or overall).
 
-        Ohne `portfolio_uuid` werden alle Depots zusammengefasst; Transfers zwischen
-        Depots heben sich dann auf. Mit `portfolio_uuid` zählen nur Bewegungen dieses
-        Depots (Transfer-Quelle -, Transfer-Ziel +).
+        Without `portfolio_uuid`, all portfolios are aggregated; transfers
+        between portfolios then cancel out. With `portfolio_uuid`, only
+        movements of that portfolio count (transfer source -, transfer target +).
         """
         data = self._ensure_loaded()
         bal: Dict[str, Decimal] = defaultdict(lambda: Decimal(0))
@@ -443,7 +444,7 @@ class Portfolio:
                 src = t.get("portfolioUuid")
                 tgt = t.get("otherPortfolioUuid")
                 if portfolio_uuid is None:
-                    continue  # depotübergreifend -> Gesamtbestand unverändert
+                    continue  # cross-portfolio -> total holdings unchanged
                 if src == portfolio_uuid:
                     bal[sec] -= shares
                 elif tgt == portfolio_uuid:
@@ -456,11 +457,12 @@ class Portfolio:
         date: Optional[str] = None,
         include_empty: bool = False,
     ) -> Dict[str, Any]:
-        """Bestände und Bewertung (Stückzahl x Kurs) zu einem Stichtag.
+        """Holdings and valuation (share count x price) as of a given date.
 
-        Ohne `portfolio` werden alle Depots zusammengefasst, ohne `date` wird der
-        aktuellste bekannte Kurs verwendet. Kurse stehen in der Währung des jeweiligen
-        Wertpapiers; es findet KEINE Währungsumrechnung statt (Summen je Währung).
+        Without `portfolio`, all portfolios are aggregated; without `date`,
+        the most recently known price is used. Prices are in the currency of
+        the respective security; NO currency conversion takes place (totals
+        per currency).
         """
         data = self._ensure_loaded()
         pf_uuid = self._resolve(portfolio, data["portfolios"]) if portfolio else None
@@ -497,14 +499,14 @@ class Portfolio:
                 "value": value,
             })
 
-        # größte Position zuerst; Positionen ohne Kurs ans Ende
+        # largest position first; positions without a price go last
         positions.sort(key=lambda p: (p["value"] is None, -(p["value"] or Decimal(0))))
 
         notes = []
         if len(totals) > 1:
-            notes.append("Mehrere Währungen – Summen je Währung getrennt, keine Umrechnung.")
+            notes.append("Multiple currencies – totals kept separate per currency, no conversion.")
         if missing_price:
-            notes.append(f"Für {missing_price} Position(en) kein Kurs zum Stichtag vorhanden (value=null).")
+            notes.append(f"No price available on the requested date for {missing_price} position(s) (value=null).")
 
         return _serialize({
             "portfolio": portfolio,
@@ -518,10 +520,11 @@ class Portfolio:
 
     @staticmethod
     def _sample_dates(start: datetime.date, end: datetime.date, interval: str) -> List[datetime.date]:
-        """Aufsteigende Stichtage zwischen start und end (inklusive) im gewünschten Intervall.
+        """Ascending sample dates between start and end (inclusive) at the requested interval.
 
-        "monthly" liefert Monatsend-Stichtage (letzter Stichtag ist immer `end`
-        selbst, auch wenn das kein Monatsende ist) – passend für Wertverlauf-Charts.
+        "monthly" returns month-end dates (the last date is always `end`
+        itself, even if that's not a month end) – suitable for value-history
+        charts.
         """
         if start > end:
             return []
@@ -553,7 +556,7 @@ class Portfolio:
                 dates.append(month_end)
                 d = next_month
             return dates
-        raise ValueError("interval muss 'daily', 'weekly' oder 'monthly' sein.")
+        raise ValueError("interval must be 'daily', 'weekly', or 'monthly'.")
 
     def holdings_history(
         self,
@@ -562,13 +565,13 @@ class Portfolio:
         date_to: Optional[str] = None,
         interval: str = "monthly",
     ) -> Dict[str, Any]:
-        """Wertverlauf (Depotbewertung) über mehrere Stichtage hinweg, für Charts.
+        """Value history (portfolio valuation) across multiple dates, for charts.
 
-        Wiederholt `holdings` für eine Serie von Stichtagen zwischen date_from und
-        date_to (inklusive). Ohne date_from wird das Datum der ersten Transaktion
-        verwendet, ohne date_to das heutige Datum. Liefert je Stichtag nur die
-        Summen je Währung (keine Einzelpositionen) – für Einzelpositionen
-        get_holdings zu einem bestimmten Datum verwenden.
+        Repeats `holdings` for a series of dates between date_from and
+        date_to (inclusive). Without date_from, the date of the first
+        transaction is used; without date_to, today's date. Returns only the
+        totals per currency for each date (no individual positions) – use
+        get_holdings for individual positions on a specific date.
         """
         data = self._ensure_loaded()
         pf_uuid = self._resolve(portfolio, data["portfolios"]) if portfolio else None
@@ -611,31 +614,31 @@ class Portfolio:
             "points": points,
         })
 
-    # -------------------------------------------------- Kurserfolg (Einstandswert)
+    # -------------------------------------------------- gains (cost basis)
     @staticmethod
     def _fee_tax_sum(t: dict) -> Decimal:
-        """Summe der Gebühren-/Steuer-units einer Transaktion."""
+        """Sum of the fee/tax units of a transaction."""
         return sum(
             (u["amount"] for u in t.get("units", []) if u["type"] in ("FEE", "TAX")),
             Decimal(0),
         )
 
     def _cost_pools(self, as_of: Optional[datetime.date]):
-        """Baut je (Depot, Wertpapier) einen Einstandswert-Pool nach der
-        gleitenden-Durchschnittspreis-Methode (wie PP im Standard) auf und
-        protokolliert dabei jeden Verkauf als realisiertes Gewinn-Ereignis.
+        """Builds a cost-basis pool per (portfolio, security) using the
+        moving-average-price method (as PP does by default), logging each
+        sale as a realized-gain event along the way.
 
-        Verarbeitet Transaktionen chronologisch bis einschließlich `as_of`
-        (oder alle, wenn None). PURCHASE/INBOUND_DELIVERY erhöhen Stückzahl und
-        Einstandswert; SALE/OUTBOUND_DELIVERY reduzieren sie anteilig zum
-        aktuellen Durchschnittspreis und erzeugen ein Realisierungs-Ereignis;
-        SECURITY_TRANSFER verschiebt Stückzahl+Einstandswert anteilig zwischen
-        den Depot-Pools (kein Gewinn-Ereignis). Je Betrag wird sowohl die
-        Variante "mit Gebühren/Steuern" als auch "ohne" mitgeführt: `amount`
-        ist bei PURCHASE bereits inkl. Gebühren, bei SALE bereits netto danach.
+        Processes transactions chronologically up to and including `as_of`
+        (or all, if None). PURCHASE/INBOUND_DELIVERY increase share count and
+        cost basis; SALE/OUTBOUND_DELIVERY reduce them proportionally at the
+        current average price and generate a realization event;
+        SECURITY_TRANSFER moves share count + cost basis proportionally
+        between the portfolio pools (no gain event). For each amount, both
+        the "with fees/taxes" and "without" variant are tracked: `amount` is
+        already fee-inclusive for PURCHASE, and already net thereof for SALE.
 
-        Liefert (pools, events); pools: Dict[(portfolioUuid, securityUuid) -> dict
-        mit shares/costFee/costNoFee]; events: Liste realisierter Verkäufe.
+        Returns (pools, events); pools: Dict[(portfolioUuid, securityUuid) -> dict
+        with shares/costFee/costNoFee]; events: list of realized sales.
         """
         data = self._ensure_loaded()
         txs = [
@@ -668,8 +671,8 @@ class Portfolio:
 
             elif typ in ("SALE", "OUTBOUND_DELIVERY"):
                 fee_tax = self._fee_tax_sum(t)
-                proceeds_fee = t["amount"]            # bereits netto (Gebühren/Steuern abgezogen)
-                proceeds_nofee = t["amount"] + fee_tax  # Bruttoerlös
+                proceeds_fee = t["amount"]            # already net (fees/taxes deducted)
+                proceeds_nofee = t["amount"] + fee_tax  # gross proceeds
                 pool = pools[(pf, sec)]
                 if pool["shares"] > 0:
                     sold = min(shares, pool["shares"])
@@ -717,8 +720,8 @@ class Portfolio:
         include_empty: bool = False,
         security: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Unrealisierter Kurserfolg je Position: aktueller Wert minus Einstandswert
-        (gleitender Durchschnittspreis), mit und ohne Gebühren/Steuern.
+        """Unrealized price gain per position: current value minus cost basis
+        (moving average price), with and without fees/taxes.
         """
         data = self._ensure_loaded()
         pf_uuid = self._resolve(portfolio, data["portfolios"]) if portfolio else None
@@ -783,13 +786,13 @@ class Portfolio:
         positions.sort(key=lambda p: (p["value"] is None, -(p["value"] or Decimal(0))))
 
         notes = [
-            "Einstandswert nach gleitendem Durchschnittspreis (wie PP-Standard), "
-            "keine FIFO-Methode."
+            "Cost basis using the moving-average-price method (PP default), "
+            "not FIFO."
         ]
         if len(totals_fee) > 1:
-            notes.append("Mehrere Währungen – Summen je Währung getrennt, keine Umrechnung.")
+            notes.append("Multiple currencies – totals kept separate per currency, no conversion.")
         if missing_price:
-            notes.append(f"Für {missing_price} Position(en) kein Kurs zum Stichtag vorhanden (value=null).")
+            notes.append(f"No price available on the requested date for {missing_price} position(s) (value=null).")
 
         return _serialize({
             "portfolio": portfolio,
@@ -811,8 +814,8 @@ class Portfolio:
         date_to: Optional[str] = None,
         security: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Realisierter Kurserfolg je Wertpapier aus Verkäufen (SALE/OUTBOUND_DELIVERY)
-        im Zeitraum, mit und ohne Gebühren/Steuern (gleitender Durchschnittspreis).
+        """Realized price gain per security from sales (SALE/OUTBOUND_DELIVERY)
+        within the period, with and without fees/taxes (moving average price).
         """
         data = self._ensure_loaded()
         pf_uuid = self._resolve(portfolio, data["portfolios"]) if portfolio else None
@@ -871,11 +874,11 @@ class Portfolio:
         positions.sort(key=lambda p: -(p["realizedGainWithFees"] or Decimal(0)))
 
         notes = [
-            "Einstandswert nach gleitendem Durchschnittspreis (wie PP-Standard), "
-            "keine FIFO-Methode."
+            "Cost basis using the moving-average-price method (PP default), "
+            "not FIFO."
         ]
         if len(totals_fee) > 1:
-            notes.append("Mehrere Währungen – Summen je Währung getrennt, keine Umrechnung.")
+            notes.append("Multiple currencies – totals kept separate per currency, no conversion.")
 
         return _serialize({
             "portfolio": portfolio,
@@ -892,11 +895,12 @@ class Portfolio:
             "note": " ".join(notes),
         })
 
-    # ------------------------------------------------------- Kontostand (Saldo)
-    # Transaktionstypen, die den Kontostand direkt verändern (Vorzeichen aus Sicht
-    # des über accountUuid referenzierten Kontos). CASH_TRANSFER wird gesondert
-    # behandelt (Quelle -, Ziel +, über otherAccountUuid). INBOUND_/OUTBOUND_
-    # DELIVERY und SECURITY_TRANSFER betreffen nur Depots, nicht das Konto.
+    # ------------------------------------------------------- account balance
+    # Transaction types that directly change the account balance (sign from
+    # the perspective of the account referenced via accountUuid). CASH_TRANSFER
+    # is handled separately (source -, target +, via otherAccountUuid).
+    # INBOUND_/OUTBOUND_DELIVERY and SECURITY_TRANSFER only affect portfolios,
+    # not the account.
     _CASH_SIGN = {
         "DEPOSIT": Decimal(1),
         "REMOVAL": Decimal(-1),
@@ -912,18 +916,18 @@ class Portfolio:
     }
 
     def account_balance(self, account: str, date: Optional[str] = None) -> Dict[str, Any]:
-        """Kontostand (Saldo) eines Verrechnungskontos zu einem Stichtag.
+        """Account balance of a settlement account as of a given date.
 
-        Summiert alle kontobewegenden Transaktionen bis einschließlich `date`
-        (ohne Angabe: alle). `amount` ist bei PURCHASE/SALE/DIVIDEND bereits der
-        volle Kassenbewegungsbetrag (Gebühren/Steuern sind als `units` bereits
-        eingerechnet, keine zusätzliche Verrechnung nötig). CASH_TRANSFER wirkt
-        auf zwei Konten: Quelle (accountUuid) -, Ziel (otherAccountUuid) +.
+        Sums all account-affecting transactions up to and including `date`
+        (without one: all). `amount` for PURCHASE/SALE/DIVIDEND is already
+        the full cash-movement amount (fees/taxes are already accounted for
+        as `units`, no additional offsetting needed). CASH_TRANSFER affects
+        two accounts: source (accountUuid) -, target (otherAccountUuid) +.
         """
         data = self._ensure_loaded()
         acc_uuid = self._resolve(account, data["accounts"])
         if acc_uuid is None:
-            raise ValueError("Kein Konto angegeben.")
+            raise ValueError("No account specified.")
         as_of = datetime.date.fromisoformat(date) if date else None
         acc = next(a for a in data["accounts"] if a["uuid"] == acc_uuid)
 
@@ -957,20 +961,20 @@ class Portfolio:
             "transactionCount": count,
         })
 
-    # -------------------------------------------------- Taxonomien / Allokation
+    # -------------------------------------------------- taxonomies / allocation
     def _resolve_taxonomy(self, data: dict, identifier: Optional[str]) -> dict:
-        """Löst eine Taxonomie über Name oder UUID auf (case-insensitiv).
+        """Resolves a taxonomy by name or UUID (case-insensitive).
 
-        Ohne `identifier` nur zulässig, wenn genau eine Taxonomie vorhanden ist.
+        Without `identifier`, only allowed if exactly one taxonomy exists.
         """
         taxonomies = data.get("taxonomies", [])
         if not taxonomies:
-            raise ValueError("Keine Taxonomien in dieser Datei vorhanden.")
+            raise ValueError("No taxonomies present in this file.")
         if identifier is None:
             if len(taxonomies) == 1:
                 return taxonomies[0]
             raise ValueError(
-                "Mehrere Taxonomien vorhanden, taxonomy angeben: "
+                "Multiple taxonomies present, please specify taxonomy: "
                 + ", ".join(t["name"] for t in taxonomies)
             )
         ident = identifier.strip().lower()
@@ -978,17 +982,17 @@ class Portfolio:
             if t["id"].lower() == ident or t["name"].lower() == ident:
                 return t
         raise ValueError(
-            f"Taxonomie '{identifier}' nicht gefunden. Verfügbar: "
+            f"Taxonomy '{identifier}' not found. Available: "
             + ", ".join(t["name"] for t in taxonomies)
         )
 
     def list_taxonomies(self) -> Any:
-        """Alle Taxonomien (Klassifikationsbäume, z.B. Anlagekategorien, Regionen,
-        Branchen) mit ihren Klassifikationen und den zugewiesenen Wertpapieren/
-        Konten. `weight` ist die PP-interne Gewichtung auf einer Skala 0..10000
-        (10000 = 100%) – bei Klassifikationen die Zielgewichtung, bei Zuweisungen
-        der Anteil des Wertpapiers/Kontos an dieser Klassifikation (meist 10000,
-        außer bei aufgeteilten Zuweisungen).
+        """All taxonomies (classification trees, e.g. asset categories,
+        regions, industries) with their classifications and the assigned
+        securities/accounts. `weight` is the PP-internal weighting on a
+        0..10000 scale (10000 = 100%) – for classifications the target
+        weight, for assignments the share of the security/account in this
+        classification (usually 10000, except for split assignments).
         """
         data = self._ensure_loaded()
 
@@ -1028,17 +1032,18 @@ class Portfolio:
         date: Optional[str] = None,
         portfolio: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Portfolio-Allokation nach einer Taxonomie (z.B. Anlagekategorien,
-        Regionen, Branchen): verteilt den aktuellen Bestandswert der Wertpapiere
-        (und – nur ohne `portfolio`-Filter – Kontostände zugewiesener
-        Verrechnungskonten, z.B. für "Barvermögen") gemäß der in Portfolio
-        Performance hinterlegten Klassifikations-Zuweisung auf einen Stichtag.
+        """Portfolio allocation according to a taxonomy (e.g. asset
+        categories, regions, industries): distributes the current holdings
+        value of securities (and – only without a `portfolio` filter –
+        balances of assigned settlement accounts, e.g. for "cash") across a
+        given date according to the classification assignment stored in
+        Portfolio Performance.
 
-        Ohne `taxonomy` wird die einzige vorhandene Taxonomie verwendet (bei
-        mehreren ist die Angabe von Name oder UUID Pflicht, siehe
-        `list_taxonomies`). Wertpapiere/Konten ohne Zuweisung in dieser Taxonomie
-        landen unter "Nicht klassifiziert". Keine FX-Umrechnung – Summen je
-        Währung.
+        Without `taxonomy`, the single existing taxonomy is used (with
+        multiple taxonomies, specifying name or UUID is mandatory, see
+        `list_taxonomies`). Securities/accounts without an assignment in this
+        taxonomy end up under "Unclassified". No FX conversion – totals per
+        currency.
         """
         data = self._ensure_loaded()
         tax = self._resolve_taxonomy(data, taxonomy)
@@ -1078,8 +1083,8 @@ class Portfolio:
             else:
                 totals[UNCLASSIFIED][currency] += value
 
-        # Kontostände nur einbeziehen, wenn nicht nach Depot gefiltert wird
-        # (Verrechnungskonten sind Depots nicht eindeutig zugeordnet).
+        # Only include account balances when not filtered by portfolio
+        # (settlement accounts are not uniquely assigned to portfolios).
         if pf_uuid is None:
             for acc in data["accounts"]:
                 assigns = vehicle_assignments.get(acc["uuid"])
@@ -1093,7 +1098,7 @@ class Portfolio:
         classifications_out = []
         for class_id, by_currency in totals.items():
             if class_id == UNCLASSIFIED:
-                out_id, name, parent_id, color = None, "Nicht klassifiziert", None, None
+                out_id, name, parent_id, color = None, "Unclassified", None, None
             else:
                 c = class_by_id.get(class_id, {})
                 out_id, name, parent_id, color = class_id, c.get("name"), c.get("parentId"), c.get("color")
@@ -1111,7 +1116,7 @@ class Portfolio:
 
         notes = []
         if missing_price:
-            notes.append(f"Für {missing_price} Position(en) kein Kurs zum Stichtag vorhanden (ausgelassen).")
+            notes.append(f"No price available on the requested date for {missing_price} position(s) (omitted).")
 
         return _serialize({
             "taxonomy": tax["name"],
@@ -1122,12 +1127,13 @@ class Portfolio:
             "note": " ".join(notes) if notes else None,
         })
 
-    # -------------------------------------------------- Sparpläne
+    # -------------------------------------------------- savings plans
     def investment_plans(self) -> Any:
-        """Liste der Sparpläne/Investmentpläne (automatische Wertpapierkäufe/
-        -verkäufe oder Konto-Ein-/Auszahlungen). `intervalMonths` ist der Abstand
-        zwischen Ausführungen in Monaten (1 = monatlich, 3 = vierteljährlich, …);
-        `transactionCount` die Anzahl bereits generierter Transaktionen.
+        """List of savings plans/investment plans (automatic security
+        purchases/sales or account deposits/withdrawals). `intervalMonths` is
+        the interval between executions in months (1 = monthly, 3 =
+        quarterly, …); `transactionCount` is the number of transactions
+        already generated.
         """
         data = self._ensure_loaded()
         result = []
@@ -1153,7 +1159,7 @@ class Portfolio:
         return _serialize(result)
 
     def _enrich(self, t: dict) -> Dict[str, Any]:
-        """Reichert eine Transaktion mit lesbaren Namen an und serialisiert sie."""
+        """Enriches a transaction with readable names and serializes it."""
         item = dict(t)
         item["accountName"] = self._account_names.get(t.get("accountUuid"))
         item["portfolioName"] = self._portfolio_names.get(t.get("portfolioUuid"))
@@ -1170,7 +1176,7 @@ class Portfolio:
         portfolio: Optional[str] = None,
         security: Optional[str] = None,
     ) -> List[dict]:
-        """Interner Filter, liefert die rohen (nicht serialisierten) Transaktionen."""
+        """Internal filter, returns the raw (non-serialized) transactions."""
         data = self._ensure_loaded()
 
         df = datetime.date.fromisoformat(date_from) if date_from else None
@@ -1182,8 +1188,8 @@ class Portfolio:
             unknown = type_set - set(TRANSACTION_TYPES)
             if unknown:
                 raise ValueError(
-                    f"Unbekannte Transaktionsart(en): {', '.join(sorted(unknown))}. "
-                    f"Gültig: {', '.join(TRANSACTION_TYPES)}"
+                    f"Unknown transaction type(s): {', '.join(sorted(unknown))}. "
+                    f"Valid: {', '.join(TRANSACTION_TYPES)}"
                 )
 
         account_uuid = self._resolve(account, data["accounts"])
@@ -1219,7 +1225,7 @@ class Portfolio:
         portfolio: Optional[str] = None,
         security: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Gefilterte, angereicherte und serialisierte Transaktionen."""
+        """Filtered, enriched, and serialized transactions."""
         return [self._enrich(t) for t in self._filter_raw(
             date_from, date_to, types, account, portfolio, security
         )]
@@ -1231,7 +1237,7 @@ class Portfolio:
         account: Optional[str] = None,
         portfolio: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Summen je Transaktionstyp und Gesamtsumme im Zeitraum (für Reports)."""
+        """Totals per transaction type and grand total within the period (for reports)."""
         rows = self._filter_raw(date_from, date_to, None, account, portfolio, None)
         by_type: Dict[str, Dict[str, Any]] = {}
         total = Decimal(0)
@@ -1255,11 +1261,12 @@ class Portfolio:
 
 
 def _load_sources() -> List[Dict[str, Any]]:
-    """Liest die konfigurierten Portfolio-Quellen.
+    """Reads the configured portfolio sources.
 
-    Bei gesetztem PP_PORTFOLIOS_CONFIG wird die JSON-Datei gelesen (Liste von
-    {id, label, path, password}). Sonst Fallback auf eine einzige Quelle "default"
-    aus PP_FILE_PATH/PP_PASSWORD (Single-File-Betrieb, z.B. lokaler launchd-Dienst).
+    If PP_PORTFOLIOS_CONFIG is set, reads that JSON file (list of
+    {id, label, path, password}). Otherwise falls back to a single source
+    "default" built from PP_FILE_PATH/PP_PASSWORD (single-file operation,
+    e.g. a local launchd service).
     """
     if settings.PP_PORTFOLIOS_CONFIG:
         with open(settings.PP_PORTFOLIOS_CONFIG, "r", encoding="utf-8") as f:
@@ -1282,33 +1289,33 @@ def _load_sources() -> List[Dict[str, Any]]:
 
 
 class PortfolioRegistry:
-    """Verwaltet mehrere Portfolio-Quellen, je eine eigene Portfolio-Instanz (mit
-    eigenem mtime-Cache) pro konfigurierter Datei."""
+    """Manages multiple portfolio sources, one dedicated Portfolio instance
+    (with its own mtime cache) per configured file."""
 
     def __init__(self, sources: List[Dict[str, Any]]):
         self._sources: Dict[str, Dict[str, Any]] = {s["id"]: s for s in sources}
         self._instances: Dict[str, Portfolio] = {}
-        # Bei genau einer Quelle ist der `source`-Parameter in den Tools optional.
+        # With exactly one source, the `source` parameter in the tools is optional.
         self._default_id = sources[0]["id"] if len(sources) == 1 else None
 
     def list_sources(self) -> List[Dict[str, str]]:
-        """Konfigurierte Quellen ohne Pfade/Passwörter (für list_data_sources)."""
+        """Configured sources without paths/passwords (for list_data_sources)."""
         return [{"id": s["id"], "label": s.get("label", s["id"])} for s in self._sources.values()]
 
     def get(self, source_id: Optional[str] = None) -> Portfolio:
         if source_id is None:
             if self._default_id is None:
                 if not self._sources:
-                    raise PortfolioNotConfigured("Keine Portfolio-Quelle konfiguriert.")
+                    raise PortfolioNotConfigured("No portfolio source configured.")
                 raise ValueError(
-                    "Mehrere Portfolio-Quellen konfiguriert – bitte 'source' angeben. "
-                    f"Verfügbar: {', '.join(sorted(self._sources))}"
+                    "Multiple portfolio sources configured – please specify 'source'. "
+                    f"Available: {', '.join(sorted(self._sources))}"
                 )
             source_id = self._default_id
         if source_id not in self._sources:
             raise ValueError(
-                f"Unbekannte Portfolio-Quelle '{source_id}'. "
-                f"Verfügbar: {', '.join(sorted(self._sources))}"
+                f"Unknown portfolio source '{source_id}'. "
+                f"Available: {', '.join(sorted(self._sources))}"
             )
         if source_id not in self._instances:
             src = self._sources[source_id]
@@ -1316,5 +1323,5 @@ class PortfolioRegistry:
         return self._instances[source_id]
 
 
-# Globale Registry – teilt sich den Cache über alle Tool-Aufrufe
+# Global registry – shares the cache across all tool calls
 registry = PortfolioRegistry(_load_sources())

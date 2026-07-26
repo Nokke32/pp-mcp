@@ -1,7 +1,7 @@
-"""Einstiegspunkt für den Portfolio-Performance MCP Server.
+"""Entry point for the Portfolio Performance MCP server.
 
-Startet ausschließlich den MCP-Server (kein Web-UI). Der Transport ist über
-`MCP_TRANSPORT` wählbar (`streamable-http` | `sse`, Default `streamable-http`).
+Starts only the MCP server (no web UI). The transport can be selected via
+`MCP_TRANSPORT` (`streamable-http` | `sse`, default `streamable-http`).
 """
 import logging
 import uvicorn
@@ -27,24 +27,24 @@ def main() -> None:
     transport = settings.MCP_TRANSPORT.strip().lower()
     if transport not in {"sse", "streamable-http"}:
         logger.warning(
-            f"Nicht unterstützter MCP_TRANSPORT '{settings.MCP_TRANSPORT}', "
-            f"nutze 'streamable-http'"
+            f"Unsupported MCP_TRANSPORT '{settings.MCP_TRANSPORT}', "
+            f"using 'streamable-http'"
         )
         transport = "streamable-http"
 
     if not settings.PP_FILE_PATH:
-        logger.warning("PP_FILE_PATH ist nicht gesetzt – Tools liefern erst nach Konfiguration Daten.")
+        logger.warning("PP_FILE_PATH is not set – tools will only return data once configured.")
 
     if settings.MCP_REQUIRE_AUTH and not settings.MCP_AUTH_TOKEN.strip():
         raise SystemExit(
-            "MCP_REQUIRE_AUTH ist aktiv, aber MCP_AUTH_TOKEN ist nicht gesetzt. "
-            "Server-Start abgebrochen, um einen ungeschützten öffentlichen Zugriff "
-            "zu verhindern. Bitte MCP_AUTH_TOKEN setzen."
+            "MCP_REQUIRE_AUTH is enabled, but MCP_AUTH_TOKEN is not set. "
+            "Server startup aborted to prevent unprotected public access. "
+            "Please set MCP_AUTH_TOKEN."
         )
 
     logger.info(
-        f"Starte MCP-Server auf {settings.MCP_SERVER_HOST}:{settings.MCP_SERVER_PORT} "
-        f"(transport={transport}, datei={settings.PP_FILE_PATH or '<nicht gesetzt>'})"
+        f"Starting MCP server on {settings.MCP_SERVER_HOST}:{settings.MCP_SERVER_PORT} "
+        f"(transport={transport}, file={settings.PP_FILE_PATH or '<not set>'})"
     )
     uvicorn.run(
         build_mcp_asgi_app(transport),

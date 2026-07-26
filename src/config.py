@@ -1,6 +1,6 @@
-"""Konfiguration für den Portfolio-Performance MCP Server.
+"""Configuration for the Portfolio Performance MCP server.
 
-Alle Werte werden aus Umgebungsvariablen bzw. einer `.env`-Datei geladen.
+All values are loaded from environment variables or a `.env` file.
 """
 from pathlib import Path
 from typing import Optional
@@ -9,37 +9,37 @@ from pydantic import Field
 
 
 class Settings(BaseSettings):
-    """Anwendungseinstellungen aus Umgebungsvariablen."""
+    """Application settings sourced from environment variables."""
 
-    # Anwendung
+    # Application
     APP_NAME: str = "PP MCP Server"
     APP_VERSION: str = "0.1.0"
 
-    # Pfad zur Portfolio-Performance-Datei (.portfolio). Fallback für Single-File-
-    # Betrieb (erzeugt intern eine einzige Quelle "default") – wird ignoriert, wenn
-    # PP_PORTFOLIOS_CONFIG gesetzt ist.
+    # Path to the Portfolio Performance file (.portfolio). Fallback for single-file
+    # operation (internally creates a single source "default") – ignored if
+    # PP_PORTFOLIOS_CONFIG is set.
     PP_FILE_PATH: str = Field(default="", env="PP_FILE_PATH")
-    # Optionales Passwort für AES-verschlüsselte Dateien. Leer = unverschlüsselt.
+    # Optional password for AES-encrypted files. Empty = unencrypted.
     PP_PASSWORD: Optional[str] = Field(default=None, env="PP_PASSWORD")
-    # Pfad zu einer JSON-Datei mit mehreren Portfolio-Quellen:
+    # Path to a JSON file with multiple portfolio sources:
     # [{"id": "...", "label": "...", "path": "...", "password": "..."}, ...]
-    # Wenn gesetzt, hat dies Vorrang vor PP_FILE_PATH/PP_PASSWORD.
+    # If set, this takes precedence over PP_FILE_PATH/PP_PASSWORD.
     PP_PORTFOLIOS_CONFIG: str = Field(default="", env="PP_PORTFOLIOS_CONFIG")
 
-    # MCP-Server – Container-Port ist fest 8080
+    # MCP server – container port is fixed at 8080
     MCP_SERVER_HOST: str = "0.0.0.0"
     MCP_SERVER_PORT: int = 8080
     MCP_TRANSPORT: str = Field(default="streamable-http", env="MCP_TRANSPORT")
-    # Optionaler Bearer-Token zum Schutz der HTTP-Endpunkte. Leer = keine
-    # Authentifizierung (nur im vertrauenswürdigen lokalen Netz unbedenklich).
+    # Optional bearer token to protect the HTTP endpoints. Empty = no
+    # authentication (only safe within a trusted local network).
     MCP_AUTH_TOKEN: str = Field(default="", env="MCP_AUTH_TOKEN")
-    # Wenn true: Server bricht den Start ab, falls MCP_AUTH_TOKEN leer ist.
-    # Default false, um bestehende lokale/vertrauenswürdige Deployments ohne
-    # Token nicht zu brechen. Für öffentlich erreichbare Deployments (z.B.
-    # docker-compose.yml) auf true setzen.
+    # If true: the server aborts startup if MCP_AUTH_TOKEN is empty.
+    # Defaults to false so existing local/trusted deployments without a
+    # token don't break. Set to true for publicly reachable deployments
+    # (e.g. docker-compose.yml).
     MCP_REQUIRE_AUTH: bool = Field(default=False, env="MCP_REQUIRE_AUTH")
 
-    # Log-Level für Python-Logging und uvicorn (DEBUG/INFO/WARNING/ERROR/CRITICAL).
+    # Log level for Python logging and uvicorn (DEBUG/INFO/WARNING/ERROR/CRITICAL).
     LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")
 
     class Config:
@@ -48,5 +48,5 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 
-# Globale Settings-Instanz
+# Global settings instance
 settings = Settings()

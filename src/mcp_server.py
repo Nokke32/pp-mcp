@@ -1,10 +1,16 @@
-"""MCP-Server für Portfolio Performance.
+"""MCP server for Portfolio Performance.
 
-Stellt lesende Tools bereit, um gefilterte Konten- und Depotdaten aus einer
-Portfolio-Performance-Datei abzufragen und daraus Reports zu erstellen.
+Provides read-only tools to query filtered account and portfolio data from a
+Portfolio Performance file and build reports from it.
 
-Alle Tools sind dünne Wrapper um `src.portfolio`. Fehler werden nicht geworfen,
-sondern als `{"status": "error", "message": ...}` zurückgegeben (Konvention wie mail-mcp).
+Terminology (see also instructions below): 'source' (parameter 'source') =
+one complete .portfolio file; 'portfolio' (parameter 'portfolio_name') =
+a securities portfolio/depot within a source; 'account' (parameter 'account')
+= a cash account within a source.
+
+All tools are thin wrappers around `src.portfolio`. Errors are not raised,
+they are returned as `{"status": "error", "message": ...}` (same convention
+as mail-mcp).
 """
 import hmac
 import logging
@@ -16,8 +22,9 @@ from src.config import settings
 from src.portfolio import registry, TRANSACTION_TYPES
 
 _SOURCE_DOC = (
-    " Optional: 'source' wählt die Portfolio-Quelle (id aus list_data_sources) bei "
-    "mehreren konfigurierten Dateien; bei genau einer Quelle kann sie weggelassen werden."
+    " Optional: 'source' selects the source (id from list_data_sources, one "
+    "complete .portfolio file – NOT a portfolio/depot) when multiple files are "
+    "configured; can be omitted if only one source is configured."
 )
 
 logger = logging.getLogger(__name__)
@@ -27,48 +34,60 @@ app = FastMCP(
     host=settings.MCP_SERVER_HOST,
     port=settings.MCP_SERVER_PORT,
     instructions=(
-        "MCP Server für Portfolio Performance. Liefert gefilterte Konten- und "
-        "Depotdaten (Umsätze, Transaktionen nach Art/Zeitraum) für Reports. "
+        "MCP server for Portfolio Performance. Provides filtered account and "
+        "portfolio data (transactions by type/date range) for reports. "
+        "Terminology: 'source' (parameter 'source') = one complete .portfolio "
+        "file, see list_data_sources. 'portfolio' (parameter 'portfolio_name') "
+        "= a securities portfolio/depot within a source, see list_portfolios. "
+        "'account' (parameter 'account') = a cash account within a source, see "
+        "list_accounts. 'security' (parameter 'security') = a stock/fund/ETF "
+        "etc., see list_securities. The word 'portfolio' alone can be "
+        "ambiguous with 'source' (a source is also a Portfolio Performance "
+        "file) – when unclear, check list_data_sources and list_portfolios "
+        "first to clarify which one is meant. "
         f"Version {settings.APP_VERSION}"
     ),
 )
 
 
 def _error(e: Exception) -> Dict[str, Any]:
-    """Wandelt eine Exception in eine Client-Antwort um.
+    """Converts an exception into a client response.
 
-    Bei FileNotFoundError wird der volle Server-Dateipfad NICHT an den Client
-    weitergegeben (Informationsleck über die Serverumgebung) – nur ins Log.
+    For FileNotFoundError, the full server file path is NOT passed to the
+    client (would leak information about the server environment) – only
+    logged.
     """
-    logger.error(f"Fehler: {e}")
+    logger.error(f"Error: {e}")
     if isinstance(e, FileNotFoundError):
         return {
             "status": "error",
-            "message": "Portfolio-Datei nicht gefunden oder nicht lesbar (siehe Server-Log).",
+            "message": "Portfolio file not found or not readable (see server log).",
         }
     return {"status": "error", "message": str(e)}
 
 
-# ==================== Datei / Stammdaten ====================
+# ==================== File / master data ====================
 
 @app.tool(
-    description="Konfigurierte Portfolio-Quellen (id + label) für den 'source'-Parameter "
-                "der übrigen Tools. Bei genau einer konfigurierten Quelle ist 'source' "
-                "überall optional."
+    description="Configured sources (id + label), each a complete .portfolio "
+                "file, for the 'source' parameter of the other tools (NOT the "
+                "portfolios/depots within a file, see list_portfolios for those). "
+                "When exactly one source is configured, 'source' is optional "
+                "everywhere."
 )
 def list_data_sources() -> Any:
-    """Konfigurierte Portfolio-Quellen (ohne Pfade/Passwörter)."""
+    """Configured sources (without paths/passwords)."""
     return registry.list_sources()
 
 
 @app.tool(
-    description="Informationen zur Portfolio-Datei: Pfad, Änderungsdatum, "
-                "verschlüsselt ja/nein, Version, Basiswährung, Anzahl Konten/Depots/"
-                "Wertpapiere/Transaktionen sowie frühestes/spätestes Transaktionsdatum."
-                + _SOURCE_DOC
+    description="Information about the portfolio file: path, modification date, "
+                "encrypted yes/no, version, base currency, number of accounts/"
+                "portfolios/securities/transactions, and earliest/latest "
+                "transaction date." + _SOURCE_DOC
 )
 def get_file_info(source: Optional[str] = None) -> Dict[str, Any]:
-    """Metadaten und Kennzahlen zur Portfolio-Datei."""
+    """Metadata and key figures about the portfolio file."""
     try:
         return registry.get(source).file_info()
     except Exception as e:
@@ -76,11 +95,11 @@ def get_file_info(source: Optional[str] = None) -> Dict[str, Any]:
 
 
 @app.tool(
-    description="Alle Konten (Verrechnungs-/Geldkonten) mit uuid, name, currencyCode und "
-                "isRetired." + _SOURCE_DOC
+    description="All accounts (cash accounts) with uuid, name, currencyCode "
+                "and isRetired." + _SOURCE_DOC
 )
 def list_accounts(source: Optional[str] = None) -> Any:
-    """Liste aller Konten."""
+    """List of all accounts."""
     try:
         return registry.get(source).list_accounts()
     except Exception as e:
@@ -88,11 +107,14 @@ def list_accounts(source: Optional[str] = None) -> Any:
 
 
 @app.tool(
-    description="Alle Depots (Portfolios) mit uuid, name, Referenzkonto und isRetired."
-                + _SOURCE_DOC
+    description="All portfolios/depots of a source (Portfolio Performance's "
+                "internal term is 'portfolio') with uuid, name, reference "
+                "account and isRetired. NOT to be confused with the 'source' "
+                "parameter (a source is a whole .portfolio file, see "
+                "list_data_sources)." + _SOURCE_DOC
 )
 def list_portfolios(source: Optional[str] = None) -> Any:
-    """Liste aller Depots."""
+    """List of all portfolios/depots."""
     try:
         return registry.get(source).list_portfolios()
     except Exception as e:
@@ -100,11 +122,12 @@ def list_portfolios(source: Optional[str] = None) -> Any:
 
 
 @app.tool(
-    description="Alle Wertpapiere mit uuid, name, isin, wkn, tickerSymbol, currencyCode und "
-                "isRetired (in PP als inaktiv markiert)." + _SOURCE_DOC
+    description="All securities with uuid, name, isin, wkn, tickerSymbol, "
+                "currencyCode and isRetired (marked inactive in PP)."
+                + _SOURCE_DOC
 )
 def list_securities(source: Optional[str] = None) -> Any:
-    """Liste aller Wertpapiere."""
+    """List of all securities."""
     try:
         return registry.get(source).list_securities()
     except Exception as e:
@@ -112,28 +135,30 @@ def list_securities(source: Optional[str] = None) -> Any:
 
 
 @app.tool(
-    description="Liste der gültigen Transaktionsarten als Filter-Hilfe "
-                "(z.B. DIVIDEND, INTEREST, TAX, PURCHASE, SALE, DEPOSIT, REMOVAL, FEE)."
+    description="List of valid transaction types as a filter aid "
+                "(e.g. DIVIDEND, INTEREST, TAX, PURCHASE, SALE, DEPOSIT, "
+                "REMOVAL, FEE)."
 )
 def list_transaction_types() -> List[str]:
-    """Verfügbare Transaktionsarten (quellenunabhängig)."""
+    """Available transaction types (source-independent)."""
     return TRANSACTION_TYPES
 
 
-# ==================== Kurse ====================
+# ==================== Prices ====================
 
 @app.tool(
-    description="Aktuellster bekannter Kurs eines Wertpapiers. Nutzt den zuletzt "
-                "abgerufenen Kurs (latest), sonst den jüngsten Historien-Schlusskurs. "
-                "Wertpapier als Name, ISIN, WKN, Ticker oder UUID. Kurs als String "
-                "(exakter Dezimalwert), Datum ISO YYYY-MM-DD, 'source' = latest|historical."
-                + _SOURCE_DOC
+    description="Most recent known price of a security. Uses the last "
+                "fetched price (latest) if available, otherwise the most "
+                "recent historical closing price. Security as name, ISIN, "
+                "WKN, ticker or UUID. Price as a string (exact decimal), date "
+                "in ISO YYYY-MM-DD, 'source' field in the result = "
+                "latest|historical." + _SOURCE_DOC
 )
 def get_latest_price(security: str, source: Optional[str] = None) -> Any:
-    """Aktuellster Kurs eines Wertpapiers.
+    """Most recent price of a security.
 
     Args:
-        security: Wertpapier als Name, ISIN, WKN, Ticker oder UUID.
+        security: Security as name, ISIN, WKN, ticker or UUID.
     """
     try:
         return registry.get(source).latest_price(security)
@@ -142,11 +167,11 @@ def get_latest_price(security: str, source: Optional[str] = None) -> Any:
 
 
 @app.tool(
-    description="Historische Tagesschlusskurse eines Wertpapiers im Zeitraum (Grenzen "
-                "inklusive), nach Datum sortiert. Wertpapier als Name, ISIN, WKN, Ticker "
-                "oder UUID. Ohne Zeitraum werden ALLE Kurse geliefert (können mehrere "
-                "tausend sein) – mit limit nur die letzten N. Kurse als Strings."
-                + _SOURCE_DOC
+    description="Historical daily closing prices of a security in a date "
+                "range (bounds inclusive), sorted by date. Security as name, "
+                "ISIN, WKN, ticker or UUID. Without a date range ALL prices "
+                "are returned (can be several thousand) – use limit to get "
+                "only the last N. Prices as strings." + _SOURCE_DOC
 )
 def get_price_history(
     security: str,
@@ -155,13 +180,13 @@ def get_price_history(
     limit: Optional[int] = None,
     source: Optional[str] = None,
 ) -> Any:
-    """Historische Schlusskurse im Zeitraum.
+    """Historical closing prices in a date range.
 
     Args:
-        security: Wertpapier als Name, ISIN, WKN, Ticker oder UUID.
-        date_from: Startdatum inklusive, ISO-Format YYYY-MM-DD.
-        date_to: Enddatum inklusive, ISO-Format YYYY-MM-DD.
-        limit: Nur die letzten N Kurse des Zeitraums zurückgeben.
+        security: Security as name, ISIN, WKN, ticker or UUID.
+        date_from: Start date inclusive, ISO format YYYY-MM-DD.
+        date_to: End date inclusive, ISO format YYYY-MM-DD.
+        limit: Return only the last N prices of the range.
     """
     try:
         return registry.get(source).price_history(
@@ -172,17 +197,18 @@ def get_price_history(
 
 
 @app.tool(
-    description="Kurs eines Wertpapiers zu einem Stichtag. Gibt es keinen Kurs am Tag "
-                "selbst, wird der letzte Kurs davor geliefert (exact=false). Nützlich für "
-                "Stichtagsbewertungen (z.B. Jahresende). Wertpapier als Name, ISIN, WKN, "
-                "Ticker oder UUID; Datum ISO YYYY-MM-DD." + _SOURCE_DOC
+    description="Price of a security as of a given date. If there is no "
+                "price on that exact day, the last price before it is "
+                "returned (exact=false). Useful for point-in-time valuations "
+                "(e.g. year end). Security as name, ISIN, WKN, ticker or "
+                "UUID; date in ISO YYYY-MM-DD." + _SOURCE_DOC
 )
 def get_price_on(security: str, date: str, source: Optional[str] = None) -> Any:
-    """Kurs zum Stichtag (exakt oder letzter davor).
+    """Price as of a given date (exact or last one before it).
 
     Args:
-        security: Wertpapier als Name, ISIN, WKN, Ticker oder UUID.
-        date: Stichtag, ISO-Format YYYY-MM-DD.
+        security: Security as name, ISIN, WKN, ticker or UUID.
+        date: Reference date, ISO format YYYY-MM-DD.
     """
     try:
         return registry.get(source).price_on(security, date)
@@ -191,12 +217,13 @@ def get_price_on(security: str, date: str, source: Optional[str] = None) -> Any:
 
 
 @app.tool(
-    description="Aktuellster Kurs ALLER Wertpapiere als Übersicht (uuid, name, isin, wkn, "
-                "tickerSymbol, currencyCode, date, close, source). Für Depot-Reports über "
-                "alle Positionen. Kurse als Strings." + _SOURCE_DOC
+    description="Most recent price of ALL securities as an overview (uuid, "
+                "name, isin, wkn, tickerSymbol, currencyCode, date, close, "
+                "source). For portfolio reports across all positions. Prices "
+                "as strings." + _SOURCE_DOC
 )
 def list_latest_prices(source: Optional[str] = None) -> Any:
-    """Aktuellster Kurs aller Wertpapiere."""
+    """Most recent price of all securities."""
     try:
         return registry.get(source).list_latest_prices()
     except Exception as e:
@@ -204,13 +231,14 @@ def list_latest_prices(source: Optional[str] = None) -> Any:
 
 
 @app.tool(
-    description="Kurs-Update-Konfiguration (Feed-Typ + Feed-URL, historisch und 'latest') "
-                "aller AKTIVEN Wertpapiere (isRetired=false). Nützlich, um zu sehen, über "
-                "welchen externen Feed (z.B. ariva.de) ein Wertpapier seine Kurse bezieht, "
-                "bevor man refresh_prices aufruft." + _SOURCE_DOC
+    description="Price update configuration (feed type + feed URL, "
+                "historical and 'latest') of all ACTIVE securities "
+                "(isRetired=false). Useful to see which external feed (e.g. "
+                "ariva.de) a security gets its prices from, before calling "
+                "refresh_prices." + _SOURCE_DOC
 )
 def list_price_feeds(source: Optional[str] = None) -> Any:
-    """Kurs-Update-Konfiguration aller aktiven Wertpapiere."""
+    """Price update configuration of all active securities."""
     try:
         return registry.get(source).list_price_feeds()
     except Exception as e:
@@ -218,23 +246,24 @@ def list_price_feeds(source: Optional[str] = None) -> Any:
 
 
 @app.tool(
-    description="Ruft über den in der Portfolio-Datei konfigurierten Kurs-Feed fehlende, "
-                "aktuellere Kurse ab und hält sie NUR TEMPORÄR im Arbeitsspeicher vor "
-                "(kein Schreibzugriff auf die .portfolio-Datei) – anschließend liefern "
-                "get_latest_price/get_price_history/get_holdings/get_unrealized_gains "
-                "diese Kurse automatisch mit. Aktuell wird nur der Feed-Typ "
-                "GENERIC_HTML_TABLE mit ariva.de-Host unterstützt; andere Feeds (z.B. PP, "
-                "YAHOO) werden übersprungen (skipped), nicht als Fehler gewertet. Ohne "
-                "'security' werden alle aktiven Wertpapiere aktualisiert. Der Overlay wird "
-                "verworfen, sobald die Datei neu geladen wird (Änderung erkannt) oder der "
-                "Server neu startet." + _SOURCE_DOC
+    description="Fetches missing, more recent prices via the price feed "
+                "configured in the portfolio file and holds them ONLY "
+                "TEMPORARILY in memory (no write access to the .portfolio "
+                "file) – afterwards get_latest_price/get_price_history/"
+                "get_holdings/get_unrealized_gains automatically include "
+                "these prices. Currently only feed type GENERIC_HTML_TABLE "
+                "with an ariva.de host is supported; other feeds (e.g. PP, "
+                "YAHOO) are skipped, not treated as an error. Without "
+                "'security', all active securities are refreshed. The "
+                "overlay is discarded as soon as the file is reloaded "
+                "(change detected) or the server restarts." + _SOURCE_DOC
 )
 def refresh_prices(security: Optional[str] = None, source: Optional[str] = None) -> Any:
-    """Fehlende Kurse per Feed nachladen (temporär, nicht persistent).
+    """Fetch missing prices via feed (temporary, not persisted).
 
     Args:
-        security: Optional ein einzelnes Wertpapier (Name, ISIN, WKN, Ticker oder
-            UUID); ohne Angabe werden alle aktiven Wertpapiere aktualisiert.
+        security: Optionally a single security (name, ISIN, WKN, ticker or
+            UUID); without it, all active securities are refreshed.
     """
     try:
         return registry.get(source).refresh_prices(security)
@@ -243,14 +272,16 @@ def refresh_prices(security: Optional[str] = None, source: Optional[str] = None)
 
 
 @app.tool(
-    description="Depotbewertung: Bestände (Stückzahl x Kurs) zu einem Stichtag. Berechnet "
-                "die gehaltenen Stückzahlen je Wertpapier aus den Transaktionen und bewertet "
-                "sie mit dem Kurs zum Stichtag. Ohne portfolio_name werden ALLE Depots "
-                "zusammengefasst (Übertragungen zwischen Depots heben sich auf); ohne date "
-                "wird der aktuellste Kurs verwendet. Depot als Name oder UUID; date ISO "
-                "YYYY-MM-DD. Kurse/Werte in der Währung des Wertpapiers – KEINE "
-                "Währungsumrechnung, Summen je Währung (totalsByCurrency). Positionen sind "
-                "nach Wert absteigend sortiert." + _SOURCE_DOC
+    description="Portfolio valuation: holdings (share count x price) as of a "
+                "given date. Computes the shares held per security from the "
+                "transactions and values them at the price as of that date. "
+                "Without portfolio_name, ALL portfolios are aggregated "
+                "(transfers between portfolios cancel out); without date, the "
+                "most recent price is used. Portfolio as name or UUID; date "
+                "in ISO YYYY-MM-DD. Prices/values are in the security's "
+                "currency – NO currency conversion, totals per currency "
+                "(totalsByCurrency). Positions are sorted by value descending."
+                + _SOURCE_DOC
 )
 def get_holdings(
     portfolio_name: Optional[str] = None,
@@ -258,12 +289,13 @@ def get_holdings(
     include_empty: bool = False,
     source: Optional[str] = None,
 ) -> Any:
-    """Bestände und Bewertung zu einem Stichtag.
+    """Holdings and valuation as of a given date.
 
     Args:
-        portfolio_name: Depot als Name oder UUID. Leer = alle Depots zusammengefasst.
-        date: Stichtag, ISO-Format YYYY-MM-DD. Leer = aktuellster Kurs.
-        include_empty: Auch vollständig verkaufte Positionen (Bestand 0) auflisten.
+        portfolio_name: Portfolio/depot as name or UUID. Empty = all
+            portfolios aggregated.
+        date: Reference date, ISO format YYYY-MM-DD. Empty = most recent price.
+        include_empty: Also list fully sold positions (zero balance).
     """
     try:
         return registry.get(source).holdings(
@@ -274,15 +306,17 @@ def get_holdings(
 
 
 @app.tool(
-    description="Wertverlauf des Depots über die Zeit (für Charts): wiederholt die "
-                "Depotbewertung für eine Serie von Stichtagen zwischen date_from und "
-                "date_to (inklusive), im gewünschten Intervall ('daily', 'weekly' oder "
-                "'monthly', Standard 'monthly'). Liefert je Stichtag nur die Summen je "
-                "Währung (totalsByCurrency), keine Einzelpositionen – für "
-                "Einzelpositionen zu einem bestimmten Datum get_holdings verwenden. "
-                "Ohne date_from wird das Datum der ersten Transaktion verwendet, ohne "
-                "date_to das heutige Datum. Ohne portfolio_name werden ALLE Depots "
-                "zusammengefasst. KEINE Währungsumrechnung." + _SOURCE_DOC
+    description="Value history of the portfolio over time (for charts): "
+                "repeats the portfolio valuation for a series of dates "
+                "between date_from and date_to (inclusive), at the desired "
+                "interval ('daily', 'weekly' or 'monthly', default "
+                "'monthly'). Returns only the totals per currency "
+                "(totalsByCurrency) for each date, no individual positions – "
+                "use get_holdings for individual positions on a specific "
+                "date. Without date_from, the date of the first transaction "
+                "is used; without date_to, today's date. Without "
+                "portfolio_name, ALL portfolios are aggregated. NO currency "
+                "conversion." + _SOURCE_DOC
 )
 def get_holdings_history(
     portfolio_name: Optional[str] = None,
@@ -291,13 +325,15 @@ def get_holdings_history(
     interval: str = "monthly",
     source: Optional[str] = None,
 ) -> Any:
-    """Wertverlauf des Depots über mehrere Stichtage.
+    """Value history of the portfolio across multiple dates.
 
     Args:
-        portfolio_name: Depot als Name oder UUID. Leer = alle Depots zusammengefasst.
-        date_from: Startdatum inklusive, ISO-Format YYYY-MM-DD. Leer = erste Transaktion.
-        date_to: Enddatum inklusive, ISO-Format YYYY-MM-DD. Leer = heute.
-        interval: 'daily', 'weekly' oder 'monthly' (Standard).
+        portfolio_name: Portfolio/depot as name or UUID. Empty = all
+            portfolios aggregated.
+        date_from: Start date inclusive, ISO format YYYY-MM-DD. Empty = first
+            transaction.
+        date_to: End date inclusive, ISO format YYYY-MM-DD. Empty = today.
+        interval: 'daily', 'weekly' or 'monthly' (default).
     """
     try:
         return registry.get(source).holdings_history(
@@ -308,17 +344,18 @@ def get_holdings_history(
 
 
 @app.tool(
-    description="Unrealisierter Kurserfolg je Position (offene Bestände): aktueller Wert "
-                "minus Einstandswert nach der gleitenden-Durchschnittspreis-Methode (wie "
-                "der PP-Standard, keine FIFO-Methode). Liefert je Position "
-                "avgCostPerShareWithFees/WithoutFees, costBasisWithFees/WithoutFees und "
-                "unrealizedGainWithFees/WithoutFees – 'WithFees' bezieht Kauf-/Verkaufs-"
-                "gebühren und -steuern mit ein, 'WithoutFees' rechnet sie heraus. Ohne "
-                "portfolio_name werden ALLE Depots zusammengefasst; ohne date wird der "
-                "aktuellste Kurs verwendet. Mit security wird auf ein einzelnes Wertpapier "
-                "gefiltert (Name, ISIN, WKN, Ticker oder UUID, wie bei get_transactions/"
-                "get_price_history). KEINE Währungsumrechnung, Summen je Währung."
-                + _SOURCE_DOC
+    description="Unrealized gain per position (open holdings): current value "
+                "minus cost basis using the moving-average-cost method (as "
+                "in PP's default, not FIFO). Returns per position "
+                "avgCostPerShareWithFees/WithoutFees, costBasisWithFees/"
+                "WithoutFees and unrealizedGainWithFees/WithoutFees – "
+                "'WithFees' includes buy/sell fees and taxes, 'WithoutFees' "
+                "excludes them. Without portfolio_name, ALL portfolios are "
+                "aggregated; without date, the most recent price is used. "
+                "With security, filters to a single security (name, ISIN, "
+                "WKN, ticker or UUID, same as get_transactions/"
+                "get_price_history). NO currency conversion, totals per "
+                "currency." + _SOURCE_DOC
 )
 def get_unrealized_gains(
     portfolio_name: Optional[str] = None,
@@ -327,13 +364,15 @@ def get_unrealized_gains(
     security: Optional[str] = None,
     source: Optional[str] = None,
 ) -> Any:
-    """Unrealisierter Kurserfolg je Position zu einem Stichtag.
+    """Unrealized gain per position as of a given date.
 
     Args:
-        portfolio_name: Depot als Name oder UUID. Leer = alle Depots zusammengefasst.
-        date: Stichtag, ISO-Format YYYY-MM-DD. Leer = aktuellster Kurs.
-        include_empty: Auch vollständig verkaufte Positionen (Bestand 0) auflisten.
-        security: Wertpapier als Name, ISIN, WKN, Ticker oder UUID. Leer = alle Positionen.
+        portfolio_name: Portfolio/depot as name or UUID. Empty = all
+            portfolios aggregated.
+        date: Reference date, ISO format YYYY-MM-DD. Empty = most recent price.
+        include_empty: Also list fully sold positions (zero balance).
+        security: Security as name, ISIN, WKN, ticker or UUID. Empty = all
+            positions.
     """
     try:
         return registry.get(source).unrealized_gains(
@@ -344,17 +383,19 @@ def get_unrealized_gains(
 
 
 @app.tool(
-    description="Realisierter Kurserfolg je Wertpapier aus Verkäufen (SALE/"
-                "OUTBOUND_DELIVERY) im Zeitraum, nach der gleitenden-Durchschnittspreis-"
-                "Methode (wie der PP-Standard, keine FIFO-Methode). Liefert je Position "
-                "sharesSold, proceedsWithFees/WithoutFees, costBasisWithFees/WithoutFees "
-                "und realizedGainWithFees/WithoutFees – 'WithFees' bezieht Verkaufsgebühren/"
-                "-steuern und die Gebühren der ursprünglichen Käufe mit ein, 'WithoutFees' "
-                "rechnet sie heraus. Ohne portfolio_name werden ALLE Depots zusammengefasst; "
-                "ohne date_from/date_to der gesamte Datenbestand. Mit security wird auf ein "
-                "einzelnes Wertpapier gefiltert (Name, ISIN, WKN, Ticker oder UUID, wie bei "
-                "get_transactions/get_price_history). KEINE Währungsumrechnung, "
-                "Summen je Währung." + _SOURCE_DOC
+    description="Realized gain per security from sales (SALE/"
+                "OUTBOUND_DELIVERY) in a date range, using the "
+                "moving-average-cost method (as in PP's default, not FIFO). "
+                "Returns per position sharesSold, proceedsWithFees/"
+                "WithoutFees, costBasisWithFees/WithoutFees and "
+                "realizedGainWithFees/WithoutFees – 'WithFees' includes sell "
+                "fees/taxes and the fees of the original purchases, "
+                "'WithoutFees' excludes them. Without portfolio_name, ALL "
+                "portfolios are aggregated; without date_from/date_to, the "
+                "entire data set. With security, filters to a single "
+                "security (name, ISIN, WKN, ticker or UUID, same as "
+                "get_transactions/get_price_history). NO currency "
+                "conversion, totals per currency." + _SOURCE_DOC
 )
 def get_realized_gains(
     portfolio_name: Optional[str] = None,
@@ -363,13 +404,15 @@ def get_realized_gains(
     security: Optional[str] = None,
     source: Optional[str] = None,
 ) -> Any:
-    """Realisierter Kurserfolg je Wertpapier im Zeitraum.
+    """Realized gain per security in a date range.
 
     Args:
-        portfolio_name: Depot als Name oder UUID. Leer = alle Depots zusammengefasst.
-        date_from: Startdatum inklusive, ISO-Format YYYY-MM-DD.
-        date_to: Enddatum inklusive, ISO-Format YYYY-MM-DD.
-        security: Wertpapier als Name, ISIN, WKN, Ticker oder UUID. Leer = alle Positionen.
+        portfolio_name: Portfolio/depot as name or UUID. Empty = all
+            portfolios aggregated.
+        date_from: Start date inclusive, ISO format YYYY-MM-DD.
+        date_to: End date inclusive, ISO format YYYY-MM-DD.
+        security: Security as name, ISIN, WKN, ticker or UUID. Empty = all
+            positions.
     """
     try:
         return registry.get(source).realized_gains(
@@ -380,15 +423,16 @@ def get_realized_gains(
 
 
 @app.tool(
-    description="Kontostand (Saldo) eines Verrechnungskontos zu einem Stichtag. "
-                "Berechnet den Saldo direkt aus allen kontobewegenden Transaktionen "
-                "(DEPOSIT/REMOVAL/DIVIDEND/INTEREST/INTEREST_CHARGE/TAX/TAX_REFUND/"
-                "FEE/FEE_REFUND/PURCHASE/SALE sowie CASH_TRANSFER zwischen zwei "
-                "Konten) – NICHT durch manuelles Aufsummieren von get_transactions "
-                "nachbilden, das ist fehleranfällig (Vorzeichen, Konto-zu-Konto-"
-                "Transfers). Konto als Name oder UUID; date ISO YYYY-MM-DD, ohne "
-                "Angabe wird der gesamte Datenbestand (aktuellster Stand) verwendet. "
-                "Saldo als String (exakter Dezimalwert) in der Kontowährung."
+    description="Balance of a cash account as of a given date. Computes the "
+                "balance directly from all balance-affecting transactions "
+                "(DEPOSIT/REMOVAL/DIVIDEND/INTEREST/INTEREST_CHARGE/TAX/"
+                "TAX_REFUND/FEE/FEE_REFUND/PURCHASE/SALE, as well as "
+                "CASH_TRANSFER between two accounts) – do NOT reconstruct "
+                "this by manually summing get_transactions, that is "
+                "error-prone (signs, account-to-account transfers). Account "
+                "as name or UUID; date in ISO YYYY-MM-DD, without it the "
+                "entire data set (most recent state) is used. Balance as a "
+                "string (exact decimal) in the account's currency."
                 + _SOURCE_DOC
 )
 def get_account_balance(
@@ -396,11 +440,12 @@ def get_account_balance(
     date: Optional[str] = None,
     source: Optional[str] = None,
 ) -> Any:
-    """Kontostand (Saldo) eines Verrechnungskontos.
+    """Balance of a cash account.
 
     Args:
-        account: Konto als Name oder UUID.
-        date: Stichtag, ISO-Format YYYY-MM-DD. Leer = aktueller Gesamtstand.
+        account: Account as name or UUID.
+        date: Reference date, ISO format YYYY-MM-DD. Empty = current overall
+            balance.
     """
     try:
         return registry.get(source).account_balance(account, date=date)
@@ -408,19 +453,20 @@ def get_account_balance(
         return _error(e)
 
 
-# ==================== Taxonomien / Allokation ====================
+# ==================== Taxonomies / allocation ====================
 
 @app.tool(
-    description="Alle Taxonomien (Klassifikationsbäume aus Portfolio Performance, z.B. "
-                "Anlagekategorien, Regionen, Branchen, Asset Allocation) mit ihrer "
-                "hierarchischen Klassifikationsstruktur (id/parentId/name/color) und den "
-                "je Klassifikation zugewiesenen Wertpapieren/Konten (vehicleUuid/"
-                "vehicleName/weight). 'weight' ist auf einer Skala 0..10000 (10000 = 100%). "
-                "Dient als Nachschlagewerk für den taxonomy-Parameter von get_asset_allocation."
-                + _SOURCE_DOC
+    description="All taxonomies (classification trees from Portfolio "
+                "Performance, e.g. asset classes, regions, industries, asset "
+                "allocation) with their hierarchical classification structure "
+                "(id/parentId/name/color) and the securities/accounts "
+                "assigned to each classification (vehicleUuid/vehicleName/"
+                "weight). 'weight' is on a scale of 0..10000 (10000 = 100%). "
+                "Serves as a lookup for the taxonomy parameter of "
+                "get_asset_allocation." + _SOURCE_DOC
 )
 def list_taxonomies(source: Optional[str] = None) -> Any:
-    """Liste aller Taxonomien mit Klassifikationsbaum und Zuweisungen."""
+    """List of all taxonomies with classification tree and assignments."""
     try:
         return registry.get(source).list_taxonomies()
     except Exception as e:
@@ -428,15 +474,17 @@ def list_taxonomies(source: Optional[str] = None) -> Any:
 
 
 @app.tool(
-    description="Portfolio-Allokation nach einer Taxonomie (z.B. Anlagekategorien, "
-                "Regionen, Branchen): verteilt den aktuellen Bestandswert der Wertpapiere "
-                "(und, ohne portfolio_name-Filter, Kontostände zugewiesener Verrechnungs-"
-                "konten, z.B. für 'Barvermögen') gemäß der in Portfolio Performance "
-                "hinterlegten Klassifikations-Zuweisung auf einen Stichtag. Ohne taxonomy "
-                "wird die einzige vorhandene Taxonomie verwendet (bei mehreren siehe "
-                "list_taxonomies für gültige Namen/UUIDs). Wertpapiere/Konten ohne "
-                "Zuweisung in dieser Taxonomie landen unter 'Nicht klassifiziert'. "
-                "KEINE Währungsumrechnung, Summen je Währung." + _SOURCE_DOC
+    description="Portfolio allocation by a taxonomy (e.g. asset classes, "
+                "regions, industries): distributes the current holdings "
+                "value of the securities (and, without a portfolio_name "
+                "filter, balances of assigned cash accounts, e.g. for 'cash') "
+                "according to the classification assignment stored in "
+                "Portfolio Performance, as of a given date. Without taxonomy, "
+                "the only existing taxonomy is used (with several, see "
+                "list_taxonomies for valid names/UUIDs). Securities/accounts "
+                "without an assignment in this taxonomy end up under "
+                "'Unclassified'. NO currency conversion, totals per currency."
+                + _SOURCE_DOC
 )
 def get_asset_allocation(
     taxonomy: Optional[str] = None,
@@ -444,14 +492,15 @@ def get_asset_allocation(
     portfolio_name: Optional[str] = None,
     source: Optional[str] = None,
 ) -> Any:
-    """Bestandswert verteilt auf die Klassifikationen einer Taxonomie.
+    """Holdings value distributed across the classifications of a taxonomy.
 
     Args:
-        taxonomy: Taxonomie als Name oder UUID (siehe list_taxonomies). Leer = einzige
-            vorhandene Taxonomie, falls nur eine konfiguriert ist.
-        date: Stichtag, ISO-Format YYYY-MM-DD. Leer = aktuellster Kurs.
-        portfolio_name: Depot als Name oder UUID. Leer = alle Depots zusammengefasst
-            (dann werden auch zugewiesene Kontostände berücksichtigt).
+        taxonomy: Taxonomy as name or UUID (see list_taxonomies). Empty = the
+            only existing taxonomy, if only one is configured.
+        date: Reference date, ISO format YYYY-MM-DD. Empty = most recent price.
+        portfolio_name: Portfolio/depot as name or UUID. Empty = all
+            portfolios aggregated (assigned account balances are then also
+            included).
     """
     try:
         return registry.get(source).asset_allocation(
@@ -461,32 +510,33 @@ def get_asset_allocation(
         return _error(e)
 
 
-# ==================== Sparpläne ====================
+# ==================== Investment plans ====================
 
 @app.tool(
-    description="Liste der Sparpläne/Investmentpläne (automatische Wertpapierkäufe/"
-                "-verkäufe oder Konto-Ein-/Auszahlungen) mit Wertpapier/Depot/Konto, "
-                "Betrag, Startdatum, intervalMonths (Abstand zwischen Ausführungen in "
-                "Monaten) und der Anzahl bereits generierter Transaktionen."
-                + _SOURCE_DOC
+    description="List of investment/savings plans (automatic security buys/"
+                "sells or account deposits/withdrawals) with security/"
+                "portfolio/account, amount, start date, intervalMonths "
+                "(spacing between executions in months) and the number of "
+                "transactions already generated." + _SOURCE_DOC
 )
 def list_investment_plans(source: Optional[str] = None) -> Any:
-    """Liste aller Sparpläne/Investmentpläne."""
+    """List of all investment/savings plans."""
     try:
         return registry.get(source).investment_plans()
     except Exception as e:
         return _error(e)
 
 
-# ==================== Transaktionen / Reports ====================
+# ==================== Transactions / reports ====================
 
 @app.tool(
-    description="Gefilterte Transaktionen abrufen. Alle Filter sind optional und werden "
-                "kombiniert (UND-Verknüpfung). Konto/Depot/Wertpapier können als Name oder "
-                "UUID angegeben werden. Deckt z.B. 'alle Umsätze eines Kontos im Zeitraum' "
-                "(account setzen) und 'alle Depottransaktionen bestimmter Arten' "
-                "(portfolio + types setzen) ab. Ergebnis ist nach Datum sortiert und mit "
-                "accountName/portfolioName/securityName angereichert." + _SOURCE_DOC
+    description="Retrieve filtered transactions. All filters are optional and "
+                "combined with AND. Account/portfolio/security can be given "
+                "as name or UUID. Covers e.g. 'all transactions of an "
+                "account in a date range' (set account) and 'all portfolio "
+                "transactions of certain types' (set portfolio_name + "
+                "types). Result is sorted by date and enriched with "
+                "accountName/portfolioName/securityName." + _SOURCE_DOC
 )
 def get_transactions(
     date_from: Optional[str] = None,
@@ -497,15 +547,15 @@ def get_transactions(
     security: Optional[str] = None,
     source: Optional[str] = None,
 ) -> Any:
-    """Gefilterte Transaktionen.
+    """Filtered transactions.
 
     Args:
-        date_from: Startdatum inklusive, ISO-Format YYYY-MM-DD.
-        date_to: Enddatum inklusive, ISO-Format YYYY-MM-DD.
-        types: Liste von Transaktionsarten (siehe list_transaction_types).
-        account: Konto als Name oder UUID.
-        portfolio_name: Depot als Name oder UUID.
-        security: Wertpapier als Name oder UUID.
+        date_from: Start date inclusive, ISO format YYYY-MM-DD.
+        date_to: End date inclusive, ISO format YYYY-MM-DD.
+        types: List of transaction types (see list_transaction_types).
+        account: Account as name or UUID.
+        portfolio_name: Portfolio/depot as name or UUID.
+        security: Security as name or UUID.
     """
     try:
         return registry.get(source).filter_transactions(
@@ -521,9 +571,10 @@ def get_transactions(
 
 
 @app.tool(
-    description="Aggregierte Zusammenfassung für Reports: Summen und Anzahl je "
-                "Transaktionsart sowie Gesamtsumme im Zeitraum. Optional auf ein Konto "
-                "oder Depot einschränken (Name oder UUID)." + _SOURCE_DOC
+    description="Aggregated summary for reports: sums and count per "
+                "transaction type as well as the total for the date range. "
+                "Optionally restrict to one account or portfolio (name or "
+                "UUID)." + _SOURCE_DOC
 )
 def get_transaction_summary(
     date_from: Optional[str] = None,
@@ -532,7 +583,7 @@ def get_transaction_summary(
     portfolio_name: Optional[str] = None,
     source: Optional[str] = None,
 ) -> Any:
-    """Summen je Typ + Gesamtsumme im Zeitraum."""
+    """Sums per type + total for the date range."""
     try:
         return registry.get(source).summarize(
             date_from=date_from,
@@ -546,18 +597,18 @@ def get_transaction_summary(
 
 # ==================== Utility ====================
 
-@app.tool(description="Ping – prüft, ob der MCP-Server läuft.")
+@app.tool(description="Ping – checks whether the MCP server is running.")
 def ping() -> str:
     return "pong"
 
 
-# ==================== Authentifizierung (optional) ====================
+# ==================== Authentication (optional) ====================
 
 class BearerAuthMiddleware:
-    """Reine ASGI-Middleware, die 'Authorization: Bearer <token>' erzwingt.
+    """Raw ASGI middleware that enforces 'Authorization: Bearer <token>'.
 
-    Bewusst als rohe ASGI-Middleware (nicht BaseHTTPMiddleware) umgesetzt, damit
-    langlebige SSE-/streamable-http-Streams nicht gepuffert werden.
+    Deliberately implemented as raw ASGI middleware (not BaseHTTPMiddleware)
+    so that long-lived SSE/streamable-http streams are not buffered.
     """
 
     def __init__(self, app, token: str) -> None:
@@ -593,7 +644,7 @@ class BearerAuthMiddleware:
 
 
 def build_mcp_asgi_app(transport: str):
-    """Baut die MCP-Starlette-App für den Transport, inkl. optionaler Bearer-Auth."""
+    """Builds the MCP Starlette app for the transport, incl. optional bearer auth."""
     if transport == "streamable-http":
         starlette_app = app.streamable_http_app()
     else:
@@ -602,10 +653,10 @@ def build_mcp_asgi_app(transport: str):
     token = (settings.MCP_AUTH_TOKEN or "").strip()
     if token:
         starlette_app.add_middleware(BearerAuthMiddleware, token=token)
-        logger.info("MCP Bearer-Token-Authentifizierung ist AKTIV")
+        logger.info("MCP bearer token authentication is ACTIVE")
     else:
         logger.warning(
-            "MCP_AUTH_TOKEN ist nicht gesetzt – der Server läuft OHNE Authentifizierung. "
-            "Vor Remote-Zugriff bitte MCP_AUTH_TOKEN setzen."
+            "MCP_AUTH_TOKEN is not set – the server is running WITHOUT "
+            "authentication. Set MCP_AUTH_TOKEN before remote access."
         )
     return starlette_app
