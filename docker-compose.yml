@@ -4,30 +4,30 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # UID/GID des Host-Users, der laut Synology-ACL Zugriff auf
-        # PP_HOST_PORTFOLIOS_DIR hat (Default passend zum eigenen NAS-Setup anpassen).
+        # UID/GID of the host user that has access to PP_HOST_PORTFOLIOS_DIR
+        # per the Synology ACL (adjust the default to match your own NAS setup).
         MCPUSER_UID: ${MCPUSER_UID:-1026}
         MCPUSER_GID: ${MCPUSER_GID:-100}
     container_name: pp-mcp-server
     ports:
-      # Nur auf localhost der NAS gebunden (Debug/Direktzugriff von der NAS-Shell).
-      # Öffentliche Erreichbarkeit läuft über nginx-proxy-manager (Netzwerk "nginx"
-      # unten), nicht über einen weiteren Host-Port.
+      # Bound to the NAS's localhost only (debug/direct access from the NAS shell).
+      # Public reachability goes through nginx-proxy-manager (network "nginx"
+      # below), not via an additional host port.
       - "127.0.0.1:${MCP_SERVER_PORT:-8080}:8080"
     volumes:
-      # Verzeichnis mit allen .portfolio-Dateien (read-only).
+      # Directory with all .portfolio files (read-only).
       - "${PP_HOST_PORTFOLIOS_DIR:-/volume1/PortfolioPerformance}:/data/portfolios:ro"
-      # JSON-Config mit den konfigurierten Quellen (read-only).
+      # JSON config with the configured sources (read-only).
       - "${PP_HOST_PORTFOLIOS_CONFIG:-./portfolios.json}:/data/portfolios.json:ro"
     environment:
       - TZ=Europe/Berlin
       - PP_PORTFOLIOS_CONFIG=/data/portfolios.json
       - MCP_TRANSPORT=${MCP_TRANSPORT:-streamable-http}
-      # Pflicht in diesem Deployment (nicht im vertrauenswürdigen lokalen Mac-Netz) –
-      # Compose bricht ab, wenn die Variable fehlt oder leer ist.
-      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:?MCP_AUTH_TOKEN muss in .env gesetzt sein}
-      # Zusätzliche Absicherung auf Anwendungsebene: Server bricht auch beim
-      # direkten Start (ohne Compose) ohne gesetztes MCP_AUTH_TOKEN ab.
+      # Required in this deployment (not on a trusted local Mac network) –
+      # Compose fails if the variable is missing or empty.
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:?MCP_AUTH_TOKEN must be set in .env}
+      # Extra safeguard at the application level: the server also refuses to
+      # start (even without Compose) if MCP_AUTH_TOKEN is unset.
       - MCP_REQUIRE_AUTH=true
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     restart: unless-stopped
@@ -42,13 +42,13 @@ services:
       - nginx
 
 networks:
-  # Gemeinsames internes Netzwerk für Backends, die pp-mcp ansprechen sollen
-  # (künftiges Dashboard-Backend, migriertes DividendenTracker-Backend).
+  # Shared internal network for backends that need to talk to pp-mcp
+  # (future dashboard backend, migrated DividendenTracker backend).
   pp-mcp-net:
     external: true
-  # Netzwerk von nginx-proxy-manager – Voraussetzung, damit NPM pp-mcp per
-  # Containername (pp-mcp-server:8080) als Proxy-Ziel erreichen kann.
-  # Zugriff bleibt trotzdem nur über den per MCP_AUTH_TOKEN geschützten Endpunkt
-  # und den in NPM konfigurierten Host möglich.
+  # Network of nginx-proxy-manager – required so NPM can reach pp-mcp by
+  # container name (pp-mcp-server:8080) as a proxy target. Access is still
+  # only possible through the endpoint protected by MCP_AUTH_TOKEN and the
+  # host configured in NPM.
   nginx:
     external: true

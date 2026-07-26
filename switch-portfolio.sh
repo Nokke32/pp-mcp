@@ -1,27 +1,28 @@
 #!/usr/bin/env bash
 #
-# switch-portfolio.sh — Portfolio-Datei des lokal laufenden pp-mcp-Servers umschalten.
+# switch-portfolio.sh — switch the portfolio file of the locally running
+# pp-mcp server.
 #
-# Setzt PP_FILE_PATH in der .env des deployten Servers und startet den
-# launchd-Dienst neu (der Server liest PP_FILE_PATH nur beim Start).
+# Sets PP_FILE_PATH in the deployed server's .env and restarts the launchd
+# service (the server only reads PP_FILE_PATH at startup).
 #
-# Aufruf:
+# Usage:
 #   ./switch-portfolio.sh "/path/to/portfolios/Example.portfolio"
-#   ./switch-portfolio.sh --list      # aktive .portfolio-Dateien ausgeben (für Menü)
+#   ./switch-portfolio.sh --list      # print active .portfolio files (for a menu)
 #
 set -euo pipefail
 
-# PATH ergänzen, damit Tools auch aus der Kurzbefehle-Umgebung gefunden werden
+# Extend PATH so tools are also found from the Shortcuts environment
 export PATH="/usr/local/bin:/opt/homebrew/bin:/bin:/usr/bin:$PATH"
 
-# --- Konfiguration -----------------------------------------------------------
-APP_DIR="/path/to/deployed/pp-mcp"      # deployter Server
+# --- Configuration -----------------------------------------------------------
+APP_DIR="/path/to/deployed/pp-mcp"      # deployed server
 ENV_FILE="$APP_DIR/.env"
-PORTFOLIO_DIR="/path/to/portfolios"     # Ordner mit den .portfolio-Dateien
-SERVICE="de.pp-mcp.server"                          # launchd-Label
+PORTFOLIO_DIR="/path/to/portfolios"     # folder with the .portfolio files
+SERVICE="de.pp-mcp.server"                          # launchd label
 # -----------------------------------------------------------------------------
 
-# --list: aktive .portfolio-Dateien auflisten (Backups/Konflikt-Kopien raus)
+# --list: list active .portfolio files (excluding backups/conflict copies)
 if [[ "${1:-}" == "--list" ]]; then
   find "$PORTFOLIO_DIR" -maxdepth 1 -name '*.portfolio' \
     ! -name '*.backup*' ! -name '*conflicted*' -print | sort
@@ -30,19 +31,19 @@ fi
 
 SELECTED="${1:-}"
 if [[ -z "$SELECTED" ]]; then
-  echo "Fehler: Kein Pfad übergeben. Aufruf: $0 /pfad/zur/datei.portfolio" >&2
+  echo "Error: no path given. Usage: $0 /path/to/file.portfolio" >&2
   exit 1
 fi
 if [[ ! -f "$SELECTED" ]]; then
-  echo "Fehler: Datei nicht gefunden: $SELECTED" >&2
+  echo "Error: file not found: $SELECTED" >&2
   exit 1
 fi
 if [[ ! -f "$ENV_FILE" ]]; then
-  echo "Fehler: .env nicht gefunden: $ENV_FILE" >&2
+  echo "Error: .env not found: $ENV_FILE" >&2
   exit 1
 fi
 
-# PP_FILE_PATH-Zeile in der .env ersetzen (awk ist sicher bei Leerzeichen/&-Zeichen)
+# Replace the PP_FILE_PATH line in .env (awk is safe with spaces/& characters)
 tmp="$(mktemp)"
 awk -v val="$SELECTED" '
   /^PP_FILE_PATH=/ { print "PP_FILE_PATH=" val; found=1; next }
@@ -50,13 +51,13 @@ awk -v val="$SELECTED" '
   END { if (!found) print "PP_FILE_PATH=" val }
 ' "$ENV_FILE" > "$tmp" && mv "$tmp" "$ENV_FILE"
 
-# launchd-Dienst neu starten (-k beendet die laufende Instanz zuerst)
+# Restart the launchd service (-k stops the running instance first)
 launchctl kickstart -k "gui/$(id -u)/$SERVICE"
 
-# Kurz warten, bis der Port wieder lauscht (max. ~5 s)
+# Wait briefly until the port is listening again (max. ~5 s)
 for _ in $(seq 1 25); do
   if lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then break; fi
   sleep 0.2
 done
 
-echo "✅ pp-mcp läuft jetzt auf: $(basename "$SELECTED")"
+echo "✅ pp-mcp is now running: $(basename "$SELECTED")"
