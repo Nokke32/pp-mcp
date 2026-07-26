@@ -185,12 +185,24 @@ python src/main.py
 Für Multi-Source stattdessen `PP_PORTFOLIOS_CONFIG=/Pfad/zur/portfolios.json` setzen
 (hat Vorrang vor `PP_FILE_PATH`/`PP_PASSWORD`).
 
+`MCP_TRANSPORT=stdio` setzen, um ganz auf den residenten HTTP-Server zu verzichten
+— der Client startet `pp-mcp` selbst als Subprozess und spricht MCP über
+stdin/stdout. Kein Port, kein Bearer-Token nötig (es gibt keine HTTP-Schicht zu
+schützen), nichts läuft im Hintergrund weiter. Passt gut, wenn man den
+Docker/Dauerbetrieb-Overhead nicht will; siehe
+[In Claude einrichten](#in-claude-einrichten) unten für eine stdio-Client-Config.
+
 ## In Claude einrichten
 
-`pp-mcp` spricht `streamable-http`, nicht stdio, wird also als entfernter HTTP-MCP-
-Server eingerichtet. Der Endpunkt ist `http://<host>:<port>/mcp` (`/sse` bei
-`MCP_TRANSPORT=sse`).
+`pp-mcp` unterstützt sowohl einen entfernten HTTP-Transport (`streamable-http`/`sse`,
+Standard — sinnvoll, wenn der Server dauerhaft laufen soll, z.B. auf einer NAS) als
+auch `stdio` (der Client startet `pp-mcp` selbst als Subprozess, kein residenter
+Server). Je nachdem wählen, wie `pp-mcp` bei dir läuft.
 (Siehe [unten](#andere-mcp-clientski-assistenten-verwenden) für andere MCP-Clients/KI-Assistenten.)
+
+### HTTP (`streamable-http`/`sse`)
+
+Der Endpunkt ist `http://<host>:<port>/mcp` (`/sse` bei `MCP_TRANSPORT=sse`).
 
 **Claude Code** — per CLI:
 
@@ -219,8 +231,9 @@ die Datei direkt bearbeiten:
 
 Ohne Auth-Token den `headers`-Block einfach ganz weglassen.
 
-**Claude Desktop** startet aktuell nur lokale stdio-Server, keine entfernten
-`streamable-http`-Server direkt — dafür `pp-mcp` über eine stdio-zu-HTTP-Bridge wie
+**Claude Desktop** startet nur lokale stdio-Server, keine entfernten
+`streamable-http`-Server direkt. Wenn `pp-mcp` dauerhaft woanders läuft (z.B. auf
+einer NAS), dafür `pp-mcp` über eine stdio-zu-HTTP-Bridge wie
 [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) einbinden. Die Konfigurationsdatei
 liegt unter:
 
@@ -241,17 +254,53 @@ liegt unter:
 }
 ```
 
+### stdio (`MCP_TRANSPORT=stdio`)
+
+Es läuft kein Server dauerhaft weiter — der Client startet `pp-mcp` selbst für jede
+Session. Die einfachere Option, wenn `pp-mcp` nicht schon dauerhaft läuft (kein
+Docker, kein Port, kein Bearer-Token nötig, da keine HTTP-Schicht existiert).
+Funktioniert direkt mit **Claude Desktop** (und Claude Code, per `claude mcp add`
+mit `command` statt `--transport http`) — keine `mcp-remote`-Bridge nötig:
+
+```json
+{
+  "mcpServers": {
+    "pp-mcp": {
+      "command": "python3",
+      "args": ["-m", "src.main"],
+      "env": {
+        "PYTHONPATH": "/Pfad/zu/pp-mcp",
+        "MCP_TRANSPORT": "stdio",
+        "PP_FILE_PATH": "/Pfad/zur/datei.portfolio"
+      }
+    }
+  }
+}
+```
+
+`args`/`PYTHONPATH` sind hier wichtig: `-m src.main` (nicht `src/main.py` als
+einfaches Skript), mit `PYTHONPATH` auf das Repo-Root, damit das `src`-Package
+aufgelöst wird. Claude Desktop berücksichtigt in dieser Config **kein** `cwd`-Feld
+(bestätigt: ein gesetztes `cwd` wird stillschweigend ignoriert), `PYTHONPATH` ist
+daher der einzige verlässliche Weg — ohne das gibt es
+`ModuleNotFoundError: No module named 'src'`. `command` muss der Python-Interpreter
+sein, der `requirements.txt` installiert hat (der `python3` eines venvs, falls
+verwendet) — Claude Desktop erbt nicht das venv der Shell.
+
+Für Multi-Source `PP_PORTFOLIOS_CONFIG` in `env` statt `PP_FILE_PATH` setzen.
+
 ## Andere MCP-Clients/KI-Assistenten verwenden
 
-`pp-mcp` ist nicht auf Claude beschränkt — es ist ein Standard-MCP-Server, der den
-`streamable-http`-Transport mit gewöhnlichen MCP-Tool-Definitionen spricht. Jeder
-MCP-kompatible Client bzw. KI-Assistent, der entfernte HTTP-MCP-Server unterstützt
-(z.B. andere LLM-Chat-Apps, IDE-Integrationen, Agent-Frameworks), kann ihn genauso
-nutzen. Den Client auf `http://<host>:<port>/mcp` zeigen lassen und, falls
-`MCP_AUTH_TOKEN` gesetzt ist, den HTTP-Header `Authorization: Bearer <MCP_AUTH_TOKEN>`
-mitgeben — in der Doku des jeweiligen Clients nachsehen, wie er entfernte MCP-Server
-einrichtet (manche, wie Claude Desktop oben, starten direkt nur lokale stdio-Server
-und brauchen eine stdio-zu-HTTP-Bridge wie `mcp-remote`).
+`pp-mcp` ist nicht auf Claude beschränkt — es ist ein Standard-MCP-Server, den jeder
+MCP-kompatible Client bzw. KI-Assistent nutzen kann, entweder über `stdio` (Client
+startet ihn direkt, siehe oben) oder über den `streamable-http`-Transport mit
+gewöhnlichen MCP-Tool-Definitionen für Clients, die entfernte HTTP-MCP-Server
+unterstützen (z.B. andere LLM-Chat-Apps, IDE-Integrationen, Agent-Frameworks). Den
+Client auf `http://<host>:<port>/mcp` zeigen lassen und, falls `MCP_AUTH_TOKEN`
+gesetzt ist, den HTTP-Header `Authorization: Bearer <MCP_AUTH_TOKEN>` mitgeben — in
+der Doku des jeweiligen Clients nachsehen, wie er entfernte MCP-Server einrichtet
+(manche, wie Claude Desktop oben, starten direkt nur lokale stdio-Server und
+brauchen eine stdio-zu-HTTP-Bridge wie `mcp-remote`).
 
 ## Portfolio-Datei umschalten (macOS)
 
@@ -279,7 +328,7 @@ Die Pfade (`APP_DIR`, `PORTFOLIO_DIR`, `SERVICE`) stehen als Konstanten oben im 
 | `PP_FILE_PATH` | – | Pfad zur `.portfolio`-Datei (Single-Source-Fallback, im Container `/data/portfolio.portfolio`). Ignoriert, wenn `PP_PORTFOLIOS_CONFIG` gesetzt ist. |
 | `PP_PASSWORD` | leer | Passwort für verschlüsselte Dateien (Single-Source). |
 | `PP_PORTFOLIOS_CONFIG` | leer | Pfad zur JSON-Konfiguration mehrerer Portfolio-Quellen (Multi-Source, siehe oben). Hat Vorrang vor `PP_FILE_PATH`/`PP_PASSWORD`. |
-| `MCP_TRANSPORT` | `streamable-http` | `streamable-http` oder `sse`. |
+| `MCP_TRANSPORT` | `streamable-http` | `streamable-http`, `sse` oder `stdio` (Betrieb auf Abruf, kein residenter HTTP-Server; siehe [oben](#in-claude-einrichten)). |
 | `MCP_SERVER_PORT` | `8080` | Host-Port (Docker). |
 | `MCP_AUTH_TOKEN` | leer | Optionaler Bearer-Token; leer = keine Auth. **Pflicht**, sobald der Server außerhalb eines vertrauenswürdigen lokalen Netzes erreichbar ist. |
 | `MCP_REQUIRE_AUTH` | `false` | Bei `true` bricht der Server-Start ab, wenn `MCP_AUTH_TOKEN` leer ist – zusätzliche Absicherung gegen versehentlichen ungeschützten Betrieb, unabhängig von Docker/Compose. In `docker-compose.yml` (Produktivbetrieb) auf `true` gesetzt. |
