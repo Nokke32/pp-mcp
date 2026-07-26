@@ -150,7 +150,7 @@ Datei tatsächlich neu geschrieben wird (mtime-Änderung, z.B. durch PP selbst) 
 der Server neu startet – ein erneuter `refresh_prices`-Aufruf holt ihn bei Bedarf
 wieder auf den aktuellen Stand.
 
-## Betrieb mit Docker (empfohlen)
+## Betrieb mit Docker
 
 Zwei Compose-Dateien für unterschiedliche Einsatzszenarien:
 
@@ -173,26 +173,52 @@ Der MCP-Server läuft auf `http://localhost:8080` (streamable-http). Details zu 
 jeweiligen Umgebungsvariablen siehe Kommentare in der jeweiligen Compose-Datei sowie
 `portfolios.json.example`.
 
-## Lokaler Betrieb (ohne Docker)
+## Lokaler Betrieb mit uv (Docker-Alternative)
+
+Für einen lokalen MCP-Client kann `uv` die Python-Installation und die virtuelle
+Umgebung verwalten. Der Client startet `pp-mcp` dann bei Bedarf über stdio:
 
 ```bash
-pip install -r requirements.txt
-export PP_FILE_PATH=/Pfad/zur/datei.portfolio
-# optional: export PP_PASSWORD=... ; export MCP_TRANSPORT=streamable-http
-python src/main.py
+uv python install 3.11
+uv venv --python 3.11
+uv pip install -r requirements.txt
+cp .env.example .env
 ```
 
-Für Multi-Source stattdessen `PP_PORTFOLIOS_CONFIG=/Pfad/zur/portfolios.json` setzen
-(hat Vorrang vor `PP_FILE_PATH`/`PP_PASSWORD`).
+In `.env` den Pfad eintragen, den der Prozess selbst verwendet (nicht den
+Docker-Mount-Pfad), und stdio auswählen:
+
+```dotenv
+PP_FILE_PATH=/absoluter/Pfad/zur/datei.portfolio
+MCP_TRANSPORT=stdio
+```
+
+Für Multi-Source stattdessen
+`PP_PORTFOLIOS_CONFIG=/absoluter/Pfad/zur/portfolios.json` setzen (hat Vorrang
+vor `PP_FILE_PATH`/`PP_PASSWORD`). Die Einrichtung lässt sich im
+Repository-Verzeichnis prüfen:
+
+```bash
+uv run --no-project python -m src.main
+```
+
+`uv` verwendet die vorhandene `.venv`; `--no-project` behält
+`requirements.txt` als Abhängigkeitsquelle bei und verhindert, dass ein
+fremdes `pyproject.toml` aus einem übergeordneten Verzeichnis erkannt wird. Im
+normalen Betrieb startet der MCP-Client diesen Befehl und steuert den
+stdio-Prozess, sodass weder Daemon noch lauschender Port nötig sind. Für einen
+lokalen HTTP-Server stattdessen `MCP_TRANSPORT=streamable-http` setzen.
 
 ## In Claude einrichten
 
-`pp-mcp` spricht `streamable-http`, nicht stdio, wird also als entfernter HTTP-MCP-
-Server eingerichtet. Der Endpunkt ist `http://<host>:<port>/mcp` (`/sse` bei
-`MCP_TRANSPORT=sse`).
-(Siehe [unten](#andere-mcp-clientski-assistenten-verwenden) für andere MCP-Clients/KI-Assistenten.)
+Die Konfiguration hängt davon ab, wie `pp-mcp` betrieben wird:
 
-**Claude Code** — per CLI:
+- Für Docker oder einen anderen dauerhaften HTTP-Betrieb den Endpunkt
+  `http://<host>:<port>/mcp` verwenden (`/sse` bei `MCP_TRANSPORT=sse`).
+- Beim lokalen `uv`-Betrieb startet Claude den Server wie unten gezeigt über
+  stdio.
+
+**Claude Code mit einem HTTP-Server** — per CLI:
 
 ```bash
 claude mcp add --transport http pp-mcp http://localhost:8080/mcp \
@@ -219,13 +245,36 @@ die Datei direkt bearbeiten:
 
 Ohne Auth-Token den `headers`-Block einfach ganz weglassen.
 
-**Claude Desktop** startet aktuell nur lokale stdio-Server, keine entfernten
-`streamable-http`-Server direkt — dafür `pp-mcp` über eine stdio-zu-HTTP-Bridge wie
-[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) einbinden. Die Konfigurationsdatei
-liegt unter:
+**Claude Desktop mit lokalem uv/stdio** — die Konfigurationsdatei liegt unter:
 
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "pp-mcp": {
+      "command": "/absoluter/Pfad/zu/uv",
+      "args": [
+        "--directory", "/absoluter/Pfad/zu/pp-mcp",
+        "run", "--no-project", "python", "-m", "src.main"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
+```
+
+Den absoluten Pfad aus `command -v uv` verwenden; grafische Anwendungen
+übernehmen den `PATH` der Shell möglicherweise nicht. `PP_FILE_PATH`,
+`PP_PASSWORD` oder `PP_PORTFOLIOS_CONFIG` besser in der `.env` des Repositorys
+belassen, statt sie in der Client-Konfiguration zu duplizieren.
+
+Für ein HTTP-Deployment lässt sich Claude Desktop stattdessen über eine
+stdio-zu-HTTP-Bridge wie
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) verbinden:
 
 ```json
 {
@@ -243,15 +292,14 @@ liegt unter:
 
 ## Andere MCP-Clients/KI-Assistenten verwenden
 
-`pp-mcp` ist nicht auf Claude beschränkt — es ist ein Standard-MCP-Server, der den
-`streamable-http`-Transport mit gewöhnlichen MCP-Tool-Definitionen spricht. Jeder
-MCP-kompatible Client bzw. KI-Assistent, der entfernte HTTP-MCP-Server unterstützt
-(z.B. andere LLM-Chat-Apps, IDE-Integrationen, Agent-Frameworks), kann ihn genauso
-nutzen. Den Client auf `http://<host>:<port>/mcp` zeigen lassen und, falls
-`MCP_AUTH_TOKEN` gesetzt ist, den HTTP-Header `Authorization: Bearer <MCP_AUTH_TOKEN>`
-mitgeben — in der Doku des jeweiligen Clients nachsehen, wie er entfernte MCP-Server
-einrichtet (manche, wie Claude Desktop oben, starten direkt nur lokale stdio-Server
-und brauchen eine stdio-zu-HTTP-Bridge wie `mcp-remote`).
+`pp-mcp` ist nicht auf Claude beschränkt — es ist ein Standard-MCP-Server mit
+gewöhnlichen MCP-Tool-Definitionen. Clients können ihn entweder lokal über
+stdio starten (mit dem obigen `uv`-Befehl) oder sich mit einem dauerhaften
+`streamable-http`-/SSE-Deployment verbinden. Für HTTP den Client auf
+`http://<host>:<port>/mcp` zeigen lassen und, falls `MCP_AUTH_TOKEN` gesetzt ist,
+den Header `Authorization: Bearer <MCP_AUTH_TOKEN>` mitgeben. Das
+Konfigurationsformat für stdio-Prozesse bzw. entfernte MCP-Server steht in der
+Dokumentation des jeweiligen Clients.
 
 ## Portfolio-Datei umschalten (macOS)
 
@@ -279,10 +327,10 @@ Die Pfade (`APP_DIR`, `PORTFOLIO_DIR`, `SERVICE`) stehen als Konstanten oben im 
 | `PP_FILE_PATH` | – | Pfad zur `.portfolio`-Datei (Single-Source-Fallback, im Container `/data/portfolio.portfolio`). Ignoriert, wenn `PP_PORTFOLIOS_CONFIG` gesetzt ist. |
 | `PP_PASSWORD` | leer | Passwort für verschlüsselte Dateien (Single-Source). |
 | `PP_PORTFOLIOS_CONFIG` | leer | Pfad zur JSON-Konfiguration mehrerer Portfolio-Quellen (Multi-Source, siehe oben). Hat Vorrang vor `PP_FILE_PATH`/`PP_PASSWORD`. |
-| `MCP_TRANSPORT` | `streamable-http` | `streamable-http` oder `sse`. |
-| `MCP_SERVER_PORT` | `8080` | Host-Port (Docker). |
+| `MCP_TRANSPORT` | `streamable-http` | `stdio`, `streamable-http` oder `sse`. |
+| `MCP_SERVER_PORT` | `8080` | Port für HTTP-Transporte (einschließlich Docker); bei stdio unbenutzt. |
 | `MCP_AUTH_TOKEN` | leer | Optionaler Bearer-Token; leer = keine Auth. **Pflicht**, sobald der Server außerhalb eines vertrauenswürdigen lokalen Netzes erreichbar ist. |
-| `MCP_REQUIRE_AUTH` | `false` | Bei `true` bricht der Server-Start ab, wenn `MCP_AUTH_TOKEN` leer ist – zusätzliche Absicherung gegen versehentlichen ungeschützten Betrieb, unabhängig von Docker/Compose. In `docker-compose.yml` (Produktivbetrieb) auf `true` gesetzt. |
+| `MCP_REQUIRE_AUTH` | `false` | Bei HTTP-Transporten bricht der Server-Start ab, wenn dieser Wert `true` und `MCP_AUTH_TOKEN` leer ist. In `docker-compose.yml` (Produktivbetrieb) auf `true` gesetzt; bei stdio ignoriert. |
 
 ## Aufbau
 

@@ -150,7 +150,7 @@ automatically taken into account by all price/valuation tools
 rewritten (mtime change, e.g. by PP itself) or the server restarts – calling
 `refresh_prices` again brings it back up to date if needed.
 
-## Running with Docker (recommended)
+## Running with Docker
 
 Two compose files for different deployment scenarios:
 
@@ -172,25 +172,50 @@ The MCP server runs on `http://localhost:8080` (streamable-http). See the commen
 in the respective compose file and `portfolios.json.example` for the relevant
 environment variables.
 
-## Running locally (without Docker)
+## Running locally with uv (Docker alternative)
+
+For a local MCP client, `uv` can manage the Python installation and virtual
+environment while the client starts `pp-mcp` on demand over stdio:
 
 ```bash
-pip install -r requirements.txt
-export PP_FILE_PATH=/path/to/file.portfolio
-# optional: export PP_PASSWORD=... ; export MCP_TRANSPORT=streamable-http
-python src/main.py
+uv python install 3.11
+uv venv --python 3.11
+uv pip install -r requirements.txt
+cp .env.example .env
 ```
 
-For multi-source, set `PP_PORTFOLIOS_CONFIG=/path/to/portfolios.json` instead
-(takes precedence over `PP_FILE_PATH`/`PP_PASSWORD`).
+In `.env`, set the path used by the process itself (not the Docker mount path)
+and select stdio:
+
+```dotenv
+PP_FILE_PATH=/absolute/path/to/file.portfolio
+MCP_TRANSPORT=stdio
+```
+
+For multi-source, set `PP_PORTFOLIOS_CONFIG=/absolute/path/to/portfolios.json`
+instead (it takes precedence over `PP_FILE_PATH`/`PP_PASSWORD`). You can verify
+the setup from the repository directory:
+
+```bash
+uv run --no-project python -m src.main
+```
+
+`uv` uses the existing `.venv`; `--no-project` keeps `requirements.txt` as the
+dependency source and prevents an unrelated parent `pyproject.toml` from being
+discovered. In normal use the MCP client runs this command and controls the
+stdio process, so no daemon or listening port is needed. To run the same local
+environment as an HTTP server instead, set `MCP_TRANSPORT=streamable-http`.
 
 ## Configuring in Claude
 
-`pp-mcp` speaks `streamable-http`, not stdio, so it's configured as a remote/HTTP
-MCP server. The endpoint is `http://<host>:<port>/mcp` (`/sse` if `MCP_TRANSPORT=sse`).
-(See [below](#using-other-mcp-clients--ai-assistants) for other MCP clients/AI assistants.)
+The configuration depends on how `pp-mcp` is run:
 
-**Claude Code** — via CLI:
+- For Docker or another persistent HTTP deployment, use the endpoint
+  `http://<host>:<port>/mcp` (`/sse` if `MCP_TRANSPORT=sse`).
+- For the local `uv` setup, let Claude launch the server over stdio as shown
+  below.
+
+**Claude Code with an HTTP server** — via CLI:
 
 ```bash
 claude mcp add --transport http pp-mcp http://localhost:8080/mcp \
@@ -217,12 +242,35 @@ Equivalently, edit the file directly:
 
 Drop the `headers` block entirely if no auth token is configured.
 
-**Claude Desktop** currently only launches local stdio servers, not remote
-`streamable-http` ones directly — point it at `pp-mcp` via a stdio-to-HTTP bridge such
-as [`mcp-remote`](https://www.npmjs.com/package/mcp-remote). Edit the config file at:
+**Claude Desktop with local uv/stdio** — edit the config file at:
 
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "pp-mcp": {
+      "command": "/absolute/path/to/uv",
+      "args": [
+        "--directory", "/absolute/path/to/pp-mcp",
+        "run", "--no-project", "python", "-m", "src.main"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
+```
+
+Use the absolute path reported by `command -v uv`; GUI applications may not
+inherit the shell's `PATH`. Keep `PP_FILE_PATH`, `PP_PASSWORD`, or
+`PP_PORTFOLIOS_CONFIG` in the repository's `.env` file rather than duplicating
+them in the client configuration.
+
+To connect Claude Desktop to an HTTP deployment instead, use a stdio-to-HTTP
+bridge such as [`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
 
 ```json
 {
@@ -240,14 +288,12 @@ as [`mcp-remote`](https://www.npmjs.com/package/mcp-remote). Edit the config fil
 
 ## Using other MCP clients / AI assistants
 
-`pp-mcp` is not Claude-specific — it's a standard MCP server speaking the
-`streamable-http` transport with plain MCP tool definitions, so any MCP-compatible
-client or AI assistant that supports remote/HTTP MCP servers can use it (e.g. other
-LLM chat apps, IDE integrations, agent frameworks). Point your client at
-`http://<host>:<port>/mcp` and, if `MCP_AUTH_TOKEN` is set, add an
-`Authorization: Bearer <MCP_AUTH_TOKEN>` HTTP header — check your client's docs for
-how it configures remote MCP servers (some, like Claude Desktop above, only support
-local stdio servers directly and need a stdio-to-HTTP bridge such as `mcp-remote`).
+`pp-mcp` is not Claude-specific — it is a standard MCP server with plain MCP tool
+definitions. Clients can either launch it locally over stdio (using the `uv`
+command above) or connect to a persistent `streamable-http`/SSE deployment. For
+HTTP, point the client at `http://<host>:<port>/mcp` and, if `MCP_AUTH_TOKEN` is
+set, add an `Authorization: Bearer <MCP_AUTH_TOKEN>` header. Check the client's
+documentation for its stdio process or remote MCP configuration format.
 
 ## Switching the portfolio file (macOS)
 
@@ -277,10 +323,10 @@ shortcut, or Siri.
 | `PP_FILE_PATH` | – | Path to the `.portfolio` file (single-source fallback, `/data/portfolio.portfolio` in the container). Ignored if `PP_PORTFOLIOS_CONFIG` is set. |
 | `PP_PASSWORD` | empty | Password for encrypted files (single-source). |
 | `PP_PORTFOLIOS_CONFIG` | empty | Path to the JSON configuration of multiple portfolio sources (multi-source, see above). Takes precedence over `PP_FILE_PATH`/`PP_PASSWORD`. |
-| `MCP_TRANSPORT` | `streamable-http` | `streamable-http` or `sse`. |
-| `MCP_SERVER_PORT` | `8080` | Host port (Docker). |
+| `MCP_TRANSPORT` | `streamable-http` | `stdio`, `streamable-http`, or `sse`. |
+| `MCP_SERVER_PORT` | `8080` | Listening port for HTTP transports (including Docker); unused for stdio. |
 | `MCP_AUTH_TOKEN` | empty | Optional bearer token; empty = no auth. **Required** as soon as the server is reachable outside a trusted local network. |
-| `MCP_REQUIRE_AUTH` | `false` | If `true`, the server aborts startup when `MCP_AUTH_TOKEN` is empty – extra safeguard against accidentally running unprotected, independent of Docker/Compose. Set to `true` in `docker-compose.yml` (production). |
+| `MCP_REQUIRE_AUTH` | `false` | For HTTP transports, the server aborts startup when this is `true` and `MCP_AUTH_TOKEN` is empty. Set to `true` in `docker-compose.yml` (production); ignored for stdio. |
 
 ## Structure
 
