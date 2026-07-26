@@ -1,17 +1,17 @@
-# MCP Framework
+# MCP framework
 mcp>=1.2.0
 uvicorn>=0.23.0
 
-# Kurs-Feed-Abruf (ariva.de, für refresh_prices)
+# Price feed fetching (ariva.de, for refresh_prices)
 httpx>=0.27.0
 
-# Konfiguration
+# Configuration
 pydantic-settings>=2.0.0
 python-dotenv>=1.0.0
 
-# Portfolio-Performance-Parser (vendored unter src/pp_parser)
-# client_pb2.py wurde mit protoc/gencode 6.31 erzeugt und benötigt die
-# passende Runtime (>= 6.31, Major 6); ältere Versionen (z.B. 4.25) brechen mit
+# Portfolio Performance parser (vendored under src/pp_parser)
+# client_pb2.py was generated with protoc/gencode 6.31 and needs a matching
+# runtime (>= 6.31, major 6); older versions (e.g. 4.25) fail with
 # "cannot import name 'runtime_version'".
 protobuf>=6.31.1,<7
 pycryptodome==3.20.0

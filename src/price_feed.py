@@ -1,10 +1,10 @@
-"""Scraper für den GENERIC_HTML_TABLE-Kurs-Feed von ariva.de.
+"""Scraper for the GENERIC_HTML_TABLE price feed from ariva.de.
 
-Portfolio Performance konfiguriert Wertpapiere u.a. mit einem historischen
-Kurs-Feed vom Typ "GENERIC_HTML_TABLE", der auf eine ariva.de-Seite mit einer
-Kurstabelle zeigt. Dieses Modul lädt diese Seite und extrahiert Datum +
-Schlusskurs je Zeile, damit `Portfolio.refresh_prices` neuere Kurse ergänzen
-kann, ohne die .portfolio-Datei selbst zu verändern.
+Portfolio Performance configures securities with, among other things, a
+historical price feed of type "GENERIC_HTML_TABLE" that points to an
+ariva.de page with a price table. This module fetches that page and
+extracts date + closing price per row, so `Portfolio.refresh_prices` can
+add more recent prices without modifying the .portfolio file itself.
 """
 import datetime
 import html
@@ -25,11 +25,11 @@ _TAG_RE = re.compile(r"<[^>]+>")
 
 
 def is_safe_url(url: str) -> bool:
-    """SSRF-Schutz: nur https, bekannter ariva.de-Host, keine privaten/internen IPs.
+    """SSRF protection: https only, known ariva.de host, no private/internal IPs.
 
-    Analog zu `is_safe_url` in DividendenTracker/app/sync.py, zusätzlich mit
-    Host-Allowlist, da diese URL nicht von einem Admin gepflegt wird, sondern
-    unverändert aus der .portfolio-Datei kommt.
+    Analogous to `is_safe_url` in DividendenTracker/app/sync.py, plus a host
+    allowlist here since this URL isn't maintained by an admin but comes
+    unmodified from the .portfolio file.
     """
     if not url:
         return False
@@ -58,27 +58,27 @@ def _strip_tags(cell_html: str) -> str:
 
 
 def _parse_date(text: str) -> datetime.date:
-    # ariva liefert Datumsangaben als "tt.mm.jj" (zweistelliges Jahr, 20xx).
+    # ariva returns dates as "dd.mm.yy" (two-digit year, 20xx).
     day, month, year = text.split(".")
     return datetime.date(2000 + int(year), int(month), int(day))
 
 
 def _parse_amount(text: str) -> Decimal:
-    # z.B. "101,14 €" -> 101.14
+    # e.g. "101,14 €" -> 101.14
     cleaned = text.replace("€", "").strip()
     cleaned = cleaned.replace(".", "").replace(",", ".")
     return Decimal(cleaned)
 
 
 def fetch_ariva_prices(url: str) -> List[Dict[str, Any]]:
-    """Lädt die historische Kurstabelle einer ariva.de-Seite.
+    """Fetches the historical price table of an ariva.de page.
 
-    Gibt eine Liste von {"date": date, "close": Decimal} zurück, neueste zuerst
-    (wie auf der Seite dargestellt). Wirft ValueError/httpx-Exceptions bei
-    Netzwerk- oder Parse-Fehlern.
+    Returns a list of {"date": date, "close": Decimal}, most recent first
+    (as shown on the page). Raises ValueError/httpx exceptions on network or
+    parse errors.
     """
     if not is_safe_url(url):
-        raise ValueError(f"URL nicht vertrauenswürdig oder nicht erlaubt (SSRF-Schutz): {url}")
+        raise ValueError(f"URL not trusted or not allowed (SSRF protection): {url}")
 
     headers = {
         "User-Agent": (
@@ -93,17 +93,17 @@ def fetch_ariva_prices(url: str) -> List[Dict[str, Any]]:
 
     marker = html_text.find('class="ql_date">Datum')
     if marker == -1:
-        raise ValueError("Kurstabelle auf der Seite nicht gefunden (Layout geändert?).")
+        raise ValueError("Price table not found on the page (layout changed?).")
     table_start = html_text.rfind("<table", 0, marker)
     table_end = html_text.find("</table>", marker)
     if table_start == -1 or table_end == -1:
-        raise ValueError("Kurstabelle auf der Seite nicht gefunden (Layout geändert?).")
+        raise ValueError("Price table not found on the page (layout changed?).")
     table_html = html_text[table_start:table_end + len("</table>")]
 
     results: List[Dict[str, Any]] = []
     for row_html in _ROW_RE.findall(table_html):
         cells = [_strip_tags(c) for c in _CELL_RE.findall(row_html)]
-        # Spalten: Datum, Erster, Hoch, Tief, Schluss, ...
+        # Columns: date, open, high, low, close, ...
         if len(cells) < 5:
             continue
         try:

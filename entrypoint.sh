@@ -1,8 +1,8 @@
 #!/bin/sh
-# Entrypoint für den Portfolio-Performance MCP Server.
-# Die Portfolio-Datei wird read-only gemountet; wir wechseln nur auf den
-# non-root User und starten die Anwendung.
+# Entrypoint for the Portfolio Performance MCP Server.
+# The portfolio file is mounted read-only; we just switch to the non-root
+# user and start the application.
 set -e
 
-echo "Starte PP MCP Server..."
+echo "Starting PP MCP Server..."
 exec gosu mcpuser python src/main.py

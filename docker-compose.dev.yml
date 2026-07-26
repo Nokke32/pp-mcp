@@ -5,21 +5,21 @@ services:
       dockerfile: Dockerfile
     container_name: pp-mcp-server
     ports:
-      - "${MCP_SERVER_PORT:-8080}:8080"  # MCP-Server – Host-Port variabel, Container-Port fest 8080
+      - "${MCP_SERVER_PORT:-8080}:8080"  # MCP server – host port variable, container port fixed at 8080
     volumes:
-      # Variante A (Default): eine einzelne Portfolio-Datei read-only mounten.
-      # Host-Pfad per PP_HOST_FILE in .env setzen (Default siehe unten).
+      # Variant A (default): mount a single portfolio file read-only.
+      # Set the host path via PP_HOST_FILE in .env (default below).
       - "${PP_HOST_FILE:-/path/to/your.portfolio}:/data/portfolio.portfolio:ro"
-      # Variante B (Multi-Source): Verzeichnis mit allen .portfolio-Dateien
-      # + JSON-Config read-only mounten. PP_PORTFOLIOS_CONFIG unten setzen und die
-      # Zeile für PP_HOST_FILE oben ggf. entfernen.
+      # Variant B (multi-source): mount a directory with all .portfolio files
+      # + JSON config read-only. Set PP_PORTFOLIOS_CONFIG below and remove the
+      # PP_HOST_FILE line above if needed.
       # - "${PP_HOST_PORTFOLIOS_DIR:-/path/to/portfolios}:/data/portfolios:ro"
       # - "${PP_HOST_PORTFOLIOS_CONFIG:-./portfolios.json}:/data/portfolios.json:ro"
     environment:
       - TZ=Europe/Berlin
       - PP_FILE_PATH=/data/portfolio.portfolio
       - PP_PASSWORD=${PP_PASSWORD:-}
-      # Für Multi-Source (Variante B) setzen – hat Vorrang vor PP_FILE_PATH/PP_PASSWORD:
+      # Set for multi-source (variant B) – takes precedence over PP_FILE_PATH/PP_PASSWORD:
       # - PP_PORTFOLIOS_CONFIG=/data/portfolios.json
       - MCP_TRANSPORT=${MCP_TRANSPORT:-streamable-http}
       - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-}
@@ -31,8 +31,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    # Für Betrieb hinter einem gemeinsamen nginx-Proxy: Netzwerk aktivieren
-    # und die networks-Sektion unten einkommentieren.
+    # For running behind a shared nginx proxy: enable the network and
+    # uncomment the networks section below.
     # networks:
     #   - nginx
 
