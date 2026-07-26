@@ -30,6 +30,23 @@ Ist im jeweiligen Kontext unklar, ob mit "Portfolio" eine Quelle oder ein Depot
 gemeint ist, hilft ein Blick in `list_data_sources` und `list_portfolios`, welche
 der beiden Bezeichnungen tatsächlich zutrifft.
 
+## Beispiel-Fragen
+
+Nach dem Einrichten kannst du deinen KI-Assistenten z.B. einfach fragen:
+
+- "Welche Wertpapiere halte ich aktuell in meinem Depot Wachstum, und was sind sie wert?"
+- "Zeig mir alle Dividendenzahlungen von meinem Konto Broker im Jahr 2025."
+- "Wie hoch ist der aktuelle Kontostand meines Kontos Tagesgeld?"
+- "Wie hat sich der Wert meines Depots Altersvorsorge in den letzten 12 Monaten entwickelt?"
+- "Wie hoch ist mein unrealisierter Gewinn bei Apple-Aktien im Depot Wachstum?"
+- "Teile meinen Bestand nach Anlagekategorien auf."
+- "Was ist der aktuelle Kurs von iShares Core MSCI World?"
+- "Liste meine Sparpläne und wie viel sie monatlich investieren."
+
+Bei mehreren konfigurierten Quellen einfach die gemeinte beim Namen nennen (z.B. "in
+meiner Quelle Altersvorsorge-Konto") — der Assistent schlägt sie über
+`list_data_sources` nach.
+
 ## Mehrere Portfolio-Dateien (Multi-Source)
 
 Standardmäßig bedient eine Instanz genau eine Datei (`PP_FILE_PATH`). Über

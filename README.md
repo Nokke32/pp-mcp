@@ -29,6 +29,22 @@ If it's unclear whether "portfolio" refers to a source or a portfolio/depot in a
 given context, check `list_data_sources` and `list_portfolios` to see which one
 actually matches.
 
+## Example questions
+
+Once connected, you can just ask your AI assistant things like:
+
+- "What securities do I currently hold in my Growth portfolio, and what are they worth?"
+- "Show me all dividend payments from my Broker account in 2025."
+- "What's the current balance of my Cash account?"
+- "How has the value of my Retirement portfolio developed over the last 12 months?"
+- "What's my unrealized gain on Apple shares in the Growth portfolio?"
+- "Break down my holdings by asset class."
+- "What's the latest price of iShares Core MSCI World?"
+- "List my savings plans and how much they invest per month."
+
+With multiple configured sources, just name the one you mean (e.g. "in my
+retirement-account source") — the assistant will look it up via `list_data_sources`.
+
 ## Multiple portfolio files (multi-source)
 
 By default, one instance serves exactly one file (`PP_FILE_PATH`). Via
