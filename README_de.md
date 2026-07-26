@@ -10,6 +10,26 @@ Ausschüttungen/Zinsen/Steuern eines Zeitraums usw.).
 Dateien werden nur **gelesen**, nie verändert. Unterstützt unverschlüsselte und
 AES-verschlüsselte (passwortgeschützte) Dateien.
 
+## Begriffe
+
+Portfolio Performance verwendet das Wort "Portfolio" für zwei verschiedene Dinge,
+was zu Verwechslungen führen kann — pp-mcp verwendet deshalb überall konsistent
+folgende Begriffe (Tool-Beschreibungen, Parameter, diese README):
+
+- **Quelle** (Parameter `source`) — eine komplette `.portfolio`-Datei, also eine
+  konfigurierte Datenquelle. Siehe `list_data_sources`.
+- **Depot** (Parameter `portfolio_name`) — ein Wertpapierdepot *innerhalb* einer
+  Quelle (Portfolio Performance nennt dieses Objekt intern selbst "portfolio").
+  Siehe `list_portfolios`.
+- **Konto** (Parameter `account`) — ein Verrechnungskonto innerhalb einer Quelle.
+  Siehe `list_accounts`.
+- **Wertpapier** (Parameter `security`) — eine Aktie, ein Fonds, ETF usw. Siehe
+  `list_securities`.
+
+Ist im jeweiligen Kontext unklar, ob mit "Portfolio" eine Quelle oder ein Depot
+gemeint ist, hilft ein Blick in `list_data_sources` und `list_portfolios`, welche
+der beiden Bezeichnungen tatsächlich zutrifft.
+
 ## Mehrere Portfolio-Dateien (Multi-Source)
 
 Standardmäßig bedient eine Instanz genau eine Datei (`PP_FILE_PATH`). Über

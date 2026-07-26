@@ -10,6 +10,25 @@ distributions/interest/taxes for a period, etc.).
 Files are only **read**, never modified. Supports unencrypted and AES-encrypted
 (password-protected) files.
 
+## Terminology
+
+Portfolio Performance uses the word "portfolio" for two different things, which can
+be ambiguous — pp-mcp uses these terms consistently everywhere (tool descriptions,
+parameters, this README):
+
+- **Source** (parameter `source`) — one complete `.portfolio` file, i.e. one
+  configured data source. See `list_data_sources`.
+- **Portfolio** (parameter `portfolio_name`) — a securities portfolio/depot *within*
+  a source (Portfolio Performance's own internal term for this object). See
+  `list_portfolios`.
+- **Account** (parameter `account`) — a cash account within a source. See
+  `list_accounts`.
+- **Security** (parameter `security`) — a stock, fund, ETF, etc. See `list_securities`.
+
+If it's unclear whether "portfolio" refers to a source or a portfolio/depot in a
+given context, check `list_data_sources` and `list_portfolios` to see which one
+actually matches.
+
 ## Multiple portfolio files (multi-source)
 
 By default, one instance serves exactly one file (`PP_FILE_PATH`). Via
