@@ -265,8 +265,8 @@ of `--transport http`) — no `mcp-remote` bridge needed:
     "pp-mcp": {
       "command": "python3",
       "args": ["-m", "src.main"],
-      "cwd": "/path/to/pp-mcp",
       "env": {
+        "PYTHONPATH": "/path/to/pp-mcp",
         "MCP_TRANSPORT": "stdio",
         "PP_FILE_PATH": "/path/to/file.portfolio"
       }
@@ -275,10 +275,13 @@ of `--transport http`) — no `mcp-remote` bridge needed:
 }
 ```
 
-`args`/`cwd` matter here: `-m src.main` (not `src/main.py` as a plain script) run from
-the repo root, so the `src` package resolves. `command` must be the Python
-interpreter that has `requirements.txt` installed (a venv's `python3`, if you use
-one) — Claude Desktop does not inherit your shell's virtualenv.
+`args`/`PYTHONPATH` matter here: `-m src.main` (not `src/main.py` as a plain script),
+with `PYTHONPATH` pointing at the repo root so the `src` package resolves. Claude
+Desktop does **not** honor a `cwd` key in this config (confirmed: adding one is
+silently ignored), so `PYTHONPATH` is the only reliable way to make this work —
+without it you get `ModuleNotFoundError: No module named 'src'`. `command` must be
+the Python interpreter that has `requirements.txt` installed (a venv's `python3`, if
+you use one) — Claude Desktop does not inherit your shell's virtualenv.
 
 For multi-source, set `PP_PORTFOLIOS_CONFIG` in `env` instead of `PP_FILE_PATH`.
 
