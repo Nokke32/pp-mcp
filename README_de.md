@@ -289,6 +289,42 @@ verwendet) — Claude Desktop erbt nicht das venv der Shell.
 
 Für Multi-Source `PP_PORTFOLIOS_CONFIG` in `env` statt `PP_FILE_PATH` setzen.
 
+**Alternative: `uv` statt einfachem `python3`/`PYTHONPATH`.** Wer
+[`uv`](https://docs.astral.sh/uv/) statt eines manuell angelegten venvs zur
+Verwaltung von Python-Installation/Dependencies nutzt, kann damit auch den
+`PYTHONPATH`-Workaround oben ersetzen — `uv --directory` wechselt selbst ins
+Repo-Verzeichnis, bevor der Befehl läuft, sodass das `src`-Package unabhängig
+davon aufgelöst wird, ob der Client `cwd` berücksichtigt:
+
+```bash
+uv python install 3.11
+cd /Pfad/zu/pp-mcp && uv venv --python 3.11 && uv pip install -r requirements.txt
+```
+
+```json
+{
+  "mcpServers": {
+    "pp-mcp": {
+      "command": "/absoluter/Pfad/zu/uv",
+      "args": [
+        "--directory", "/Pfad/zu/pp-mcp",
+        "run", "--no-project", "python", "-m", "src.main"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "PP_FILE_PATH": "/Pfad/zur/datei.portfolio"
+      }
+    }
+  }
+}
+```
+
+Den absoluten Pfad aus `command -v uv` verwenden — grafische Anwendungen wie
+Claude Desktop übernehmen den `PATH` der Shell möglicherweise nicht.
+`--no-project` behält `requirements.txt`/`uv pip install` als Abhängigkeitsquelle
+bei und verhindert, dass ein fremdes `pyproject.toml` aus einem übergeordneten
+Verzeichnis erkannt wird.
+
 ## Andere MCP-Clients/KI-Assistenten verwenden
 
 `pp-mcp` ist nicht auf Claude beschränkt — es ist ein Standard-MCP-Server, den jeder
@@ -329,9 +365,9 @@ Die Pfade (`APP_DIR`, `PORTFOLIO_DIR`, `SERVICE`) stehen als Konstanten oben im 
 | `PP_PASSWORD` | leer | Passwort für verschlüsselte Dateien (Single-Source). |
 | `PP_PORTFOLIOS_CONFIG` | leer | Pfad zur JSON-Konfiguration mehrerer Portfolio-Quellen (Multi-Source, siehe oben). Hat Vorrang vor `PP_FILE_PATH`/`PP_PASSWORD`. |
 | `MCP_TRANSPORT` | `streamable-http` | `streamable-http`, `sse` oder `stdio` (Betrieb auf Abruf, kein residenter HTTP-Server; siehe [oben](#in-claude-einrichten)). |
-| `MCP_SERVER_PORT` | `8080` | Host-Port (Docker). |
+| `MCP_SERVER_PORT` | `8080` | Port für HTTP-Transporte (einschließlich Docker); bei stdio unbenutzt. |
 | `MCP_AUTH_TOKEN` | leer | Optionaler Bearer-Token; leer = keine Auth. **Pflicht**, sobald der Server außerhalb eines vertrauenswürdigen lokalen Netzes erreichbar ist. |
-| `MCP_REQUIRE_AUTH` | `false` | Bei `true` bricht der Server-Start ab, wenn `MCP_AUTH_TOKEN` leer ist – zusätzliche Absicherung gegen versehentlichen ungeschützten Betrieb, unabhängig von Docker/Compose. In `docker-compose.yml` (Produktivbetrieb) auf `true` gesetzt. |
+| `MCP_REQUIRE_AUTH` | `false` | Bei HTTP-Transporten bricht der Server-Start ab, wenn dieser Wert `true` und `MCP_AUTH_TOKEN` leer ist. In `docker-compose.yml` (Produktivbetrieb) auf `true` gesetzt; bei stdio ignoriert. |
 
 ## Aufbau
 

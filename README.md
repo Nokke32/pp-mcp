@@ -285,6 +285,41 @@ you use one) — Claude Desktop does not inherit your shell's virtualenv.
 
 For multi-source, set `PP_PORTFOLIOS_CONFIG` in `env` instead of `PP_FILE_PATH`.
 
+**Alternative: `uv` instead of a plain `python3`/`PYTHONPATH`.** If you use
+[`uv`](https://docs.astral.sh/uv/) to manage the Python installation/dependencies
+instead of a manually created venv, it can also replace the `PYTHONPATH` workaround
+above — `uv --directory` changes into the repo directory itself before running
+the command, so the `src` package resolves regardless of whether the client
+honors `cwd`:
+
+```bash
+uv python install 3.11
+cd /path/to/pp-mcp && uv venv --python 3.11 && uv pip install -r requirements.txt
+```
+
+```json
+{
+  "mcpServers": {
+    "pp-mcp": {
+      "command": "/absolute/path/to/uv",
+      "args": [
+        "--directory", "/path/to/pp-mcp",
+        "run", "--no-project", "python", "-m", "src.main"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "PP_FILE_PATH": "/path/to/file.portfolio"
+      }
+    }
+  }
+}
+```
+
+Use the absolute path reported by `command -v uv` — GUI apps like Claude Desktop
+may not inherit the shell's `PATH`. `--no-project` keeps `requirements.txt`/`uv
+pip install` as the dependency source and prevents an unrelated parent
+`pyproject.toml` from being picked up.
+
 ## Using other MCP clients / AI assistants
 
 `pp-mcp` is not Claude-specific — it's a standard MCP server, and any MCP-compatible
@@ -326,9 +361,9 @@ shortcut, or Siri.
 | `PP_PASSWORD` | empty | Password for encrypted files (single-source). |
 | `PP_PORTFOLIOS_CONFIG` | empty | Path to the JSON configuration of multiple portfolio sources (multi-source, see above). Takes precedence over `PP_FILE_PATH`/`PP_PASSWORD`. |
 | `MCP_TRANSPORT` | `streamable-http` | `streamable-http`, `sse`, or `stdio` (run-on-demand, no resident HTTP server; see [below](#configuring-in-claude)). |
-| `MCP_SERVER_PORT` | `8080` | Host port (Docker). |
+| `MCP_SERVER_PORT` | `8080` | Listening port for HTTP transports (including Docker); unused for stdio. |
 | `MCP_AUTH_TOKEN` | empty | Optional bearer token; empty = no auth. **Required** as soon as the server is reachable outside a trusted local network. |
-| `MCP_REQUIRE_AUTH` | `false` | If `true`, the server aborts startup when `MCP_AUTH_TOKEN` is empty – extra safeguard against accidentally running unprotected, independent of Docker/Compose. Set to `true` in `docker-compose.yml` (production). |
+| `MCP_REQUIRE_AUTH` | `false` | For HTTP transports, the server aborts startup when this is `true` and `MCP_AUTH_TOKEN` is empty. Set to `true` in `docker-compose.yml` (production); ignored for stdio. |
 
 ## Structure
 
