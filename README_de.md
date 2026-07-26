@@ -153,6 +153,7 @@ Für Multi-Source stattdessen `PP_PORTFOLIOS_CONFIG=/Pfad/zur/portfolios.json` s
 `pp-mcp` spricht `streamable-http`, nicht stdio, wird also als entfernter HTTP-MCP-
 Server eingerichtet. Der Endpunkt ist `http://<host>:<port>/mcp` (`/sse` bei
 `MCP_TRANSPORT=sse`).
+(Siehe [unten](#andere-mcp-clientski-assistenten-verwenden) für andere MCP-Clients/KI-Assistenten.)
 
 **Claude Code** — per CLI:
 
@@ -202,6 +203,18 @@ liegt unter:
   }
 }
 ```
+
+## Andere MCP-Clients/KI-Assistenten verwenden
+
+`pp-mcp` ist nicht auf Claude beschränkt — es ist ein Standard-MCP-Server, der den
+`streamable-http`-Transport mit gewöhnlichen MCP-Tool-Definitionen spricht. Jeder
+MCP-kompatible Client bzw. KI-Assistent, der entfernte HTTP-MCP-Server unterstützt
+(z.B. andere LLM-Chat-Apps, IDE-Integrationen, Agent-Frameworks), kann ihn genauso
+nutzen. Den Client auf `http://<host>:<port>/mcp` zeigen lassen und, falls
+`MCP_AUTH_TOKEN` gesetzt ist, den HTTP-Header `Authorization: Bearer <MCP_AUTH_TOKEN>`
+mitgeben — in der Doku des jeweiligen Clients nachsehen, wie er entfernte MCP-Server
+einrichtet (manche, wie Claude Desktop oben, starten direkt nur lokale stdio-Server
+und brauchen eine stdio-zu-HTTP-Bridge wie `mcp-remote`).
 
 ## Portfolio-Datei umschalten (macOS)
 
