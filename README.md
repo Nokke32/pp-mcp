@@ -263,8 +263,8 @@ of `--transport http`) — no `mcp-remote` bridge needed:
 {
   "mcpServers": {
     "pp-mcp": {
-      "command": "python",
-      "args": ["src/main.py"],
+      "command": "python3",
+      "args": ["-m", "src.main"],
       "cwd": "/path/to/pp-mcp",
       "env": {
         "MCP_TRANSPORT": "stdio",
@@ -274,6 +274,11 @@ of `--transport http`) — no `mcp-remote` bridge needed:
   }
 }
 ```
+
+`args`/`cwd` matter here: `-m src.main` (not `src/main.py` as a plain script) run from
+the repo root, so the `src` package resolves. `command` must be the Python
+interpreter that has `requirements.txt` installed (a venv's `python3`, if you use
+one) — Claude Desktop does not inherit your shell's virtualenv.
 
 For multi-source, set `PP_PORTFOLIOS_CONFIG` in `env` instead of `PP_FILE_PATH`.
 
