@@ -153,6 +153,7 @@ For multi-source, set `PP_PORTFOLIOS_CONFIG=/path/to/portfolios.json` instead
 
 `pp-mcp` speaks `streamable-http`, not stdio, so it's configured as a remote/HTTP
 MCP server. The endpoint is `http://<host>:<port>/mcp` (`/sse` if `MCP_TRANSPORT=sse`).
+(See [below](#using-other-mcp-clients--ai-assistants) for other MCP clients/AI assistants.)
 
 **Claude Code** — via CLI:
 
@@ -201,6 +202,17 @@ as [`mcp-remote`](https://www.npmjs.com/package/mcp-remote). Edit the config fil
   }
 }
 ```
+
+## Using other MCP clients / AI assistants
+
+`pp-mcp` is not Claude-specific — it's a standard MCP server speaking the
+`streamable-http` transport with plain MCP tool definitions, so any MCP-compatible
+client or AI assistant that supports remote/HTTP MCP servers can use it (e.g. other
+LLM chat apps, IDE integrations, agent frameworks). Point your client at
+`http://<host>:<port>/mcp` and, if `MCP_AUTH_TOKEN` is set, add an
+`Authorization: Bearer <MCP_AUTH_TOKEN>` HTTP header — check your client's docs for
+how it configures remote MCP servers (some, like Claude Desktop above, only support
+local stdio servers directly and need a stdio-to-HTTP bridge such as `mcp-remote`).
 
 ## Switching the portfolio file (macOS)
 
