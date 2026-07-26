@@ -22,6 +22,10 @@ services:
     environment:
       - TZ=Europe/Berlin
       - PP_PORTFOLIOS_CONFIG=/data/portfolios.json
+      # Must stay 0.0.0.0 inside the container – otherwise the port mapping
+      # above and the nginx-proxy-manager network below can't reach it. The
+      # app's own default is 127.0.0.1 (least exposure for non-Docker runs).
+      - MCP_SERVER_HOST=0.0.0.0
       - MCP_TRANSPORT=${MCP_TRANSPORT:-streamable-http}
       # Required in this deployment (not on a trusted local Mac network) –
       # Compose fails if the variable is missing or empty.

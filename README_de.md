@@ -179,7 +179,8 @@ jeweiligen Umgebungsvariablen siehe Kommentare in der jeweiligen Compose-Datei s
 pip install -r requirements.txt
 export PP_FILE_PATH=/Pfad/zur/datei.portfolio
 # optional: export PP_PASSWORD=... ; export MCP_TRANSPORT=streamable-http
-python src/main.py
+python -m src.main   # vom Repo-Root aus - "python src/main.py" schlägt fehl mit
+                     # ModuleNotFoundError: No module named 'src'
 ```
 
 Für Multi-Source stattdessen `PP_PORTFOLIOS_CONFIG=/Pfad/zur/portfolios.json` setzen
@@ -365,6 +366,7 @@ Die Pfade (`APP_DIR`, `PORTFOLIO_DIR`, `SERVICE`) stehen als Konstanten oben im 
 | `PP_PASSWORD` | leer | Passwort für verschlüsselte Dateien (Single-Source). |
 | `PP_PORTFOLIOS_CONFIG` | leer | Pfad zur JSON-Konfiguration mehrerer Portfolio-Quellen (Multi-Source, siehe oben). Hat Vorrang vor `PP_FILE_PATH`/`PP_PASSWORD`. |
 | `MCP_TRANSPORT` | `streamable-http` | `streamable-http`, `sse` oder `stdio` (Betrieb auf Abruf, kein residenter HTTP-Server; siehe [oben](#in-claude-einrichten)). |
+| `MCP_SERVER_HOST` | `127.0.0.1` | Interface, an das HTTP-Transporte binden; bei stdio unbenutzt. Docker-Deployments setzen dies auf `0.0.0.0` (bereits in `docker-compose*.yml` gesetzt), damit der Container über das Port-Mapping erreichbar ist. Bei lokalem Betrieb ohne Docker nur auf `0.0.0.0` setzen, wenn LAN-Erreichbarkeit wirklich nötig ist, und dabei `MCP_AUTH_TOKEN` verwenden. |
 | `MCP_SERVER_PORT` | `8080` | Port für HTTP-Transporte (einschließlich Docker); bei stdio unbenutzt. |
 | `MCP_AUTH_TOKEN` | leer | Optionaler Bearer-Token; leer = keine Auth. **Pflicht**, sobald der Server außerhalb eines vertrauenswürdigen lokalen Netzes erreichbar ist. |
 | `MCP_REQUIRE_AUTH` | `false` | Bei HTTP-Transporten bricht der Server-Start ab, wenn dieser Wert `true` und `MCP_AUTH_TOKEN` leer ist. In `docker-compose.yml` (Produktivbetrieb) auf `true` gesetzt; bei stdio ignoriert. |

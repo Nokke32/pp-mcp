@@ -178,7 +178,8 @@ environment variables.
 pip install -r requirements.txt
 export PP_FILE_PATH=/path/to/file.portfolio
 # optional: export PP_PASSWORD=... ; export MCP_TRANSPORT=streamable-http
-python src/main.py
+python -m src.main   # from the repo root - "python src/main.py" fails with
+                     # ModuleNotFoundError: No module named 'src'
 ```
 
 For multi-source, set `PP_PORTFOLIOS_CONFIG=/path/to/portfolios.json` instead
@@ -361,6 +362,7 @@ shortcut, or Siri.
 | `PP_PASSWORD` | empty | Password for encrypted files (single-source). |
 | `PP_PORTFOLIOS_CONFIG` | empty | Path to the JSON configuration of multiple portfolio sources (multi-source, see above). Takes precedence over `PP_FILE_PATH`/`PP_PASSWORD`. |
 | `MCP_TRANSPORT` | `streamable-http` | `streamable-http`, `sse`, or `stdio` (run-on-demand, no resident HTTP server; see [below](#configuring-in-claude)). |
+| `MCP_SERVER_HOST` | `127.0.0.1` | Interface HTTP transports bind to; unused for stdio. Docker deployments override this to `0.0.0.0` (already set in `docker-compose*.yml`) so the container is reachable via the port mapping. For non-Docker/local operation, only set to `0.0.0.0` if you actually need LAN reachability, and use `MCP_AUTH_TOKEN`. |
 | `MCP_SERVER_PORT` | `8080` | Listening port for HTTP transports (including Docker); unused for stdio. |
 | `MCP_AUTH_TOKEN` | empty | Optional bearer token; empty = no auth. **Required** as soon as the server is reachable outside a trusted local network. |
 | `MCP_REQUIRE_AUTH` | `false` | For HTTP transports, the server aborts startup when this is `true` and `MCP_AUTH_TOKEN` is empty. Set to `true` in `docker-compose.yml` (production); ignored for stdio. |
