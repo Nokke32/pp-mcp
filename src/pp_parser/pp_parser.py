@@ -241,6 +241,10 @@ def parse_portfolio_file(filepath: str, password: str = None) -> dict:
                 "amount": Decimal(u.amount) / 100,
                 "currencyCode": u.currencyCode,
             }
+            if u.HasField("fxAmount"):
+                unit_dict["fxAmount"] = Decimal(u.fxAmount) / 100
+            if u.HasField("fxCurrencyCode"):
+                unit_dict["fxCurrencyCode"] = u.fxCurrencyCode
             trans_dict["units"].append(unit_dict)
         result["transactions"].append(trans_dict)
 

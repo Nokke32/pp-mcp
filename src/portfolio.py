@@ -944,7 +944,24 @@ class Portfolio:
                     balance -= amount
                     count += 1
                 elif t.get("otherAccountUuid") == acc_uuid:
-                    balance += amount
+                    target_amount = amount
+                    if t.get("currencyCode") != acc["currencyCode"]:
+                        target_amount = next(
+                            (
+                                u["fxAmount"]
+                                for u in t.get("units", [])
+                                if u["type"] == "GROSS_VALUE"
+                                and u.get("fxCurrencyCode") == acc["currencyCode"]
+                                and u.get("fxAmount") is not None
+                            ),
+                            None,
+                        )
+                        if target_amount is None:
+                            raise ValueError(
+                                "Cross-currency cash transfer has no amount in "
+                                f"the target account currency {acc['currencyCode']}."
+                            )
+                    balance += target_amount
                     count += 1
             elif typ in self._CASH_SIGN:
                 if t.get("accountUuid") != acc_uuid:
