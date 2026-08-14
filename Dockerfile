@@ -13,9 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Non-root user – UID/GID matching the owner of the mounted portfolio files,
 # selectable via build args (default: previous behavior with a free UID/GID).
-# For running on the "nas-intern" NAS (Synology ACL only allows certain
-# users/groups), UID=1026 (norbert), GID=100 (users) are passed at build time –
-# see docker-compose.yml.
+# For NAS deployments where the storage ACL only allows certain users/groups,
+# pass the matching host UID/GID at build time – see docker-compose.yml.
 ARG MCPUSER_UID=1000
 ARG MCPUSER_GID=1000
 RUN (getent group ${MCPUSER_GID} || groupadd -g ${MCPUSER_GID} mcpuser) \
