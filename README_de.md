@@ -8,13 +8,40 @@ gefiltert bereitstellt — z.B. um daraus Reports zu erzeugen (Umsätze eines Ko
 Ausschüttungen/Zinsen/Steuern eines Zeitraums usw.).
 
 Dateien werden nur **gelesen**, nie verändert. Unterstützt unverschlüsselte und
-AES-verschlüsselte (passwortgeschützte) Dateien.
+AES-verschlüsselte (passwortgeschützte) Dateien. Funktioniert als Standard-[MCP](https://modelcontextprotocol.io)-Server
+mit jedem MCP-kompatiblen KI-Assistenten (Claude usw.) oder eigenen Skripten.
+
+**📖 Die vollständige Dokumentation steht im
+[Wiki](https://github.com/Nokke32/pp-mcp/wiki)** — Installation (lokal & Docker,
+Single- & Multi-Source), KI-Assistenten anbinden (Claude Desktop, Claude Code,
+andere), Beispiel-Prompts und die komplette Tool-Referenz (Parameter/Rückgaben)
+fürs direkte Scripten gegen pp-mcp.
+
+## Schnellstart
+
+```bash
+pip install -r requirements.txt
+export PP_FILE_PATH=/Pfad/zur/datei.portfolio
+python -m src.main   # vom Repo-Root aus; läuft auf http://localhost:8080
+```
+
+Oder mit Docker:
+
+```bash
+cp .env.example .env
+docker-compose -f docker-compose.dev.yml up -d --build
+```
+
+Details zu Docker-Produktivbetrieb/Multi-Source, allen Umgebungsvariablen und dem
+Anbinden eines KI-Assistenten stehen auf der Wiki-Seite
+[Installation](https://github.com/Nokke32/pp-mcp/wiki/Installation) bzw.
+[Configuring AI Tools](https://github.com/Nokke32/pp-mcp/wiki/Configuring-AI-Tools).
 
 ## Begriffe
 
 Portfolio Performance verwendet das Wort "Portfolio" für zwei verschiedene Dinge,
 was zu Verwechslungen führen kann — pp-mcp verwendet deshalb überall konsistent
-folgende Begriffe (Tool-Beschreibungen, Parameter, diese README):
+folgende Begriffe (Tool-Beschreibungen, Parameter, Wiki):
 
 - **Quelle** (Parameter `source`) — eine komplette `.portfolio`-Datei, also eine
   konfigurierte Datenquelle. Siehe `list_data_sources`.
@@ -29,347 +56,6 @@ folgende Begriffe (Tool-Beschreibungen, Parameter, diese README):
 Ist im jeweiligen Kontext unklar, ob mit "Portfolio" eine Quelle oder ein Depot
 gemeint ist, hilft ein Blick in `list_data_sources` und `list_portfolios`, welche
 der beiden Bezeichnungen tatsächlich zutrifft.
-
-## Beispiel-Fragen
-
-Nach dem Einrichten kannst du deinen KI-Assistenten z.B. einfach fragen:
-
-- "Welche Wertpapiere halte ich aktuell in meinem Depot Wachstum, und was sind sie wert?"
-- "Zeig mir alle Dividendenzahlungen von meinem Konto Broker im Jahr 2025."
-- "Wie hoch ist der aktuelle Kontostand meines Kontos Tagesgeld?"
-- "Wie hat sich der Wert meines Depots Altersvorsorge in den letzten 12 Monaten entwickelt?"
-- "Wie hoch ist mein unrealisierter Gewinn bei Apple-Aktien im Depot Wachstum?"
-- "Teile meinen Bestand nach Anlagekategorien auf."
-- "Was ist der aktuelle Kurs von iShares Core MSCI World?"
-- "Liste meine Sparpläne und wie viel sie monatlich investieren."
-
-Bei mehreren konfigurierten Quellen einfach die gemeinte beim Namen nennen (z.B. "in
-meiner Quelle Altersvorsorge-Konto") — der Assistent schlägt sie über
-`list_data_sources` nach.
-
-## Mehrere Portfolio-Dateien (Multi-Source)
-
-Standardmäßig bedient eine Instanz genau eine Datei (`PP_FILE_PATH`). Über
-`PP_PORTFOLIOS_CONFIG` lässt sich stattdessen eine JSON-Datei mit mehreren Quellen
-konfigurieren (siehe `portfolios.json.example`):
-
-```json
-[
-  {"id": "example1", "label": "Example1", "path": "/data/portfolios/Example1.portfolio", "password": null},
-  {"id": "example2", "label": "Example2", "path": "/data/portfolios/Example2.portfolio", "password": null}
-]
-```
-
-Jedes Tool bekommt dann einen zusätzlichen optionalen Parameter `source` (die `id`
-aus der Config). Bei genau einer konfigurierten Quelle kann `source` weggelassen
-werden. `list_data_sources` gibt die verfügbaren `id`+`label` zurück, ohne Pfade
-oder Passwörter preiszugeben. Jede Quelle hat ihren eigenen mtime-Cache.
-
-## Tools
-
-| Tool | Zweck |
-|------|-------|
-| `list_data_sources` | Konfigurierte Portfolio-Quellen (id, label) für den `source`-Parameter der übrigen Tools. |
-| `get_file_info` | Metadaten der Datei: Pfad, Änderungsdatum, verschlüsselt ja/nein, Version, Basiswährung, Anzahl Konten/Depots/Wertpapiere/Transaktionen, frühestes/spätestes Transaktionsdatum. |
-| `list_accounts` | Alle Konten (uuid, name, currencyCode, isRetired). |
-| `list_portfolios` | Alle Depots (uuid, name, Referenzkonto, isRetired). |
-| `list_securities` | Alle Wertpapiere (uuid, name, isin, wkn, tickerSymbol, currencyCode, isRetired). |
-| `list_transaction_types` | Gültige Transaktionsarten als Filter-Hilfe. |
-| `get_transactions` | Gefilterte Transaktionen (Zeitraum, Arten, Konto/Depot/Wertpapier – jeweils optional), inkl. `securityIsin` je Transaktion. |
-| `get_transaction_summary` | Summen und Anzahl je Transaktionsart + Gesamtsumme im Zeitraum. |
-| `get_latest_price` | Aktuellster bekannter Kurs eines Wertpapiers (latest-Feld, sonst jüngster Historien-Kurs). |
-| `get_price_history` | Historische Tagesschlusskurse im Zeitraum (optional `limit` für die letzten N). |
-| `get_price_on` | Kurs zu einem Stichtag – exakt oder letzter Kurs davor (für Stichtagsbewertungen). |
-| `list_latest_prices` | Aktuellster Kurs **aller** Wertpapiere als Übersicht. |
-| `list_price_feeds` | Kurs-Update-Konfiguration (Feed-Typ + Feed-URL) aller aktiven Wertpapiere. |
-| `refresh_prices` | Fehlende, aktuellere Kurse per Feed nachladen – nur temporär im Speicher, siehe unten. |
-| `get_holdings` | Depotbewertung: Bestände (Stückzahl × Kurs) zu einem Stichtag, optional je Depot. |
-| `get_holdings_history` | Wertverlauf des Depots über mehrere Stichtage (`daily`/`weekly`/`monthly`) – Summen je Währung, für Charts. |
-| `get_unrealized_gains` | Unrealisierter Kurserfolg je offener Position (gleitender Durchschnittspreis, wie PP-Standard). |
-| `get_realized_gains` | Realisierter Kurserfolg je Wertpapier aus Verkäufen im Zeitraum. |
-| `get_account_balance` | Kontostand (Saldo) eines Verrechnungskontos zu einem Stichtag. |
-| `list_taxonomies` | Alle Taxonomien (Anlagekategorien, Regionen, Branchen, …) mit Klassifikationsbaum und Zuweisungen. |
-| `get_asset_allocation` | Bestandswert verteilt auf die Klassifikationen einer Taxonomie. |
-| `list_investment_plans` | Sparpläne/Investmentpläne mit Wertpapier/Depot/Konto, Betrag und Intervall. |
-| `ping` | Prüft, ob der Server läuft. |
-
-`get_transactions` deckt beide Kern-Anwendungsfälle ab:
-- **Umsätze eines Kontos im Zeitraum**: `account` + `date_from`/`date_to` setzen.
-- **Depottransaktionen bestimmter Arten**: `portfolio_name` + `types` (+ Zeitraum) setzen.
-
-**Für den aktuellen Kontostand `get_account_balance` verwenden, nicht `get_transactions`
-manuell aufsummieren:** `get_transactions`/`get_transaction_summary` filtern nur nach dem
-in der Transaktion primär referenzierten Konto – bei `CASH_TRANSFER` zwischen zwei Konten
-taucht der Zufluss beim Zielkonto dort **nicht** auf (nur beim Quellkonto). `get_account_balance`
-berücksichtigt beide Seiten von `CASH_TRANSFER` sowie die korrekten Vorzeichen aller
-kontobewegenden Transaktionsarten und liefert den tatsächlichen Saldo.
-
-Konto/Depot/Wertpapier können als **Name oder UUID** angegeben werden (Groß-/Kleinschreibung egal).
-Datumsangaben im ISO-Format `YYYY-MM-DD`. Beträge werden als Strings zurückgegeben (exakte Dezimalwerte).
-Alle Tools außer `list_transaction_types` (quellenunabhängig) und `list_data_sources`
-akzeptieren zusätzlich `source` zur Auswahl der Portfolio-Datei bei Multi-Source-Betrieb.
-
-Transaktionsarten: `PURCHASE, SALE, SECURITY_TRANSFER, CASH_TRANSFER, DEPOSIT, REMOVAL,
-DIVIDEND, INTEREST, INTEREST_CHARGE, TAX, TAX_REFUND, FEE, FEE_REFUND`.
-
-Bei den Kurs-Tools kann das Wertpapier zusätzlich über **ISIN, WKN oder Ticker** (statt
-Name/UUID) angegeben werden. Kurse werden als Strings zurückgegeben; `source` unterscheidet
-`latest` (zuletzt abgerufener Kurs) von `historical` (jüngster Historien-Schlusskurs).
-
-`get_holdings` berechnet die gehaltene Stückzahl je Wertpapier aus den Transaktionen
-(PURCHASE/SALE, Ein-/Auslieferungen, Depotüberträge) und bewertet sie mit dem Kurs zum
-Stichtag. Ohne `portfolio_name` werden alle Depots zusammengefasst (Überträge zwischen
-Depots heben sich auf), ohne `date` gilt der aktuellste Kurs. **Keine Währungsumrechnung:**
-Werte stehen in der Währung des Wertpapiers, Summen werden je Währung ausgewiesen
-(`totalsByCurrency`).
-
-`get_holdings_history` wiederholt dieselbe Berechnung für eine Serie von Stichtagen
-zwischen `date_from` und `date_to` (inklusive) und liefert je Stichtag nur
-`totalsByCurrency` (keine Einzelpositionen) – gedacht für Wertverlauf-Charts. Ohne
-`date_from` wird das Datum der ersten Transaktion verwendet, ohne `date_to` das
-heutige Datum. `interval` steuert die Auflösung: `monthly` (Standard, Monatsend-
-Stichtage, letzter Punkt ist immer `date_to`), `weekly` oder `daily`.
-
-## Fehlende Kurse nachladen (`refresh_prices`)
-
-Portfolio Performance konfiguriert Wertpapiere mit einem Kurs-Feed (`feed`/`feedURL`
-je Security, sichtbar über `list_price_feeds`). Ist die `.portfolio`-Datei nicht ganz
-aktuell (PP wurde z.B. länger nicht geöffnet), kann `refresh_prices` fehlende, neuere
-Kurse direkt über diesen Feed nachladen. Aktuell wird dafür nur der Feed-Typ
-`GENERIC_HTML_TABLE` mit `ariva.de`-Host unterstützt (SSRF-geschützt: nur `https`,
-Host-Allowlist, keine privaten/internen IPs) – andere Feeds (`PP`, `YAHOO`, …) werden
-übersprungen und als solche gemeldet, nicht als Fehler.
-
-Die nachgeladenen Kurse landen in einem **rein temporären In-Memory-Overlay** je
-Portfolio-Quelle – die `.portfolio`-Datei wird dabei **nie** verändert. Der Overlay
-ergänzt nur Datumswerte, die in der Datei fehlen (bestehende Datei-Kurse werden nie
-überschrieben), und wird automatisch von allen Preis-/Bewertungs-Tools mitberück-
-sichtigt (`get_latest_price`, `get_price_history`, `get_holdings`,
-`get_unrealized_gains`, `get_holdings_history`, …). Er wird verworfen, sobald die
-Datei tatsächlich neu geschrieben wird (mtime-Änderung, z.B. durch PP selbst) oder
-der Server neu startet – ein erneuter `refresh_prices`-Aufruf holt ihn bei Bedarf
-wieder auf den aktuellen Stand.
-
-## Betrieb mit Docker (empfohlen)
-
-Zwei Compose-Dateien für unterschiedliche Einsatzszenarien:
-
-- **`docker-compose.yml`** — Multi-Source-Produktivbetrieb (z.B. Synology NAS):
-  Verzeichnis mit mehreren `.portfolio`-Dateien + `portfolios.json`, `MCP_AUTH_TOKEN`
-  Pflicht, Port nur auf `127.0.0.1` gebunden, externe Docker-Netzwerke für
-  nginx-proxy-manager und weitere Backends.
-- **`docker-compose.dev.yml`** — einfacher lokaler Single-Source-Betrieb: eine
-  einzelne Datei über `PP_HOST_FILE` gemountet, ohne Auth-Pflicht, ohne externe
-  Netzwerke.
-
-```bash
-cp .env.example .env      # anpassen je nach gewählter Compose-Datei
-docker-compose -f docker-compose.dev.yml up -d --build   # lokal, Single-Source
-# oder
-docker-compose up -d --build                             # Produktiv, Multi-Source
-```
-
-Der MCP-Server läuft auf `http://localhost:8080` (streamable-http). Details zu den
-jeweiligen Umgebungsvariablen siehe Kommentare in der jeweiligen Compose-Datei sowie
-`portfolios.json.example`.
-
-## Lokaler Betrieb (ohne Docker)
-
-```bash
-pip install -r requirements.txt
-export PP_FILE_PATH=/Pfad/zur/datei.portfolio
-# optional: export PP_PASSWORD=... ; export MCP_TRANSPORT=streamable-http
-python -m src.main   # vom Repo-Root aus - "python src/main.py" schlägt fehl mit
-                     # ModuleNotFoundError: No module named 'src'
-```
-
-Für Multi-Source stattdessen `PP_PORTFOLIOS_CONFIG=/Pfad/zur/portfolios.json` setzen
-(hat Vorrang vor `PP_FILE_PATH`/`PP_PASSWORD`).
-
-`MCP_TRANSPORT=stdio` setzen, um ganz auf den residenten HTTP-Server zu verzichten
-— der Client startet `pp-mcp` selbst als Subprozess und spricht MCP über
-stdin/stdout. Kein Port, kein Bearer-Token nötig (es gibt keine HTTP-Schicht zu
-schützen), nichts läuft im Hintergrund weiter. Passt gut, wenn man den
-Docker/Dauerbetrieb-Overhead nicht will; siehe
-[In Claude einrichten](#in-claude-einrichten) unten für eine stdio-Client-Config.
-
-## In Claude einrichten
-
-`pp-mcp` unterstützt sowohl einen entfernten HTTP-Transport (`streamable-http`/`sse`,
-Standard — sinnvoll, wenn der Server dauerhaft laufen soll, z.B. auf einer NAS) als
-auch `stdio` (der Client startet `pp-mcp` selbst als Subprozess, kein residenter
-Server). Je nachdem wählen, wie `pp-mcp` bei dir läuft.
-(Siehe [unten](#andere-mcp-clientski-assistenten-verwenden) für andere MCP-Clients/KI-Assistenten.)
-
-### HTTP (`streamable-http`/`sse`)
-
-Der Endpunkt ist `http://<host>:<port>/mcp` (`/sse` bei `MCP_TRANSPORT=sse`).
-
-**Claude Code** — per CLI:
-
-```bash
-claude mcp add --transport http pp-mcp http://localhost:8080/mcp \
-  --header "Authorization: Bearer <MCP_AUTH_TOKEN>"
-```
-
-`--header` weglassen, wenn `MCP_AUTH_TOKEN` leer ist. Das schreibt in `~/.claude.json`
-(User-Scope) bzw. mit `--scope project` in `.mcp.json` im aktuellen Projekt. Alternativ
-die Datei direkt bearbeiten:
-
-```json
-{
-  "mcpServers": {
-    "pp-mcp": {
-      "type": "http",
-      "url": "http://localhost:8080/mcp",
-      "headers": {
-        "Authorization": "Bearer <MCP_AUTH_TOKEN>"
-      }
-    }
-  }
-}
-```
-
-Ohne Auth-Token den `headers`-Block einfach ganz weglassen.
-
-**Claude Desktop** startet nur lokale stdio-Server, keine entfernten
-`streamable-http`-Server direkt. Wenn `pp-mcp` dauerhaft woanders läuft (z.B. auf
-einer NAS), dafür `pp-mcp` über eine stdio-zu-HTTP-Bridge wie
-[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) einbinden. Die Konfigurationsdatei
-liegt unter:
-
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "pp-mcp": {
-      "command": "npx",
-      "args": [
-        "-y", "mcp-remote", "http://localhost:8080/mcp",
-        "--header", "Authorization: Bearer <MCP_AUTH_TOKEN>"
-      ]
-    }
-  }
-}
-```
-
-### stdio (`MCP_TRANSPORT=stdio`)
-
-Es läuft kein Server dauerhaft weiter — der Client startet `pp-mcp` selbst für jede
-Session. Die einfachere Option, wenn `pp-mcp` nicht schon dauerhaft läuft (kein
-Docker, kein Port, kein Bearer-Token nötig, da keine HTTP-Schicht existiert).
-Funktioniert direkt mit **Claude Desktop** (und Claude Code, per `claude mcp add`
-mit `command` statt `--transport http`) — keine `mcp-remote`-Bridge nötig:
-
-```json
-{
-  "mcpServers": {
-    "pp-mcp": {
-      "command": "python3",
-      "args": ["-m", "src.main"],
-      "env": {
-        "PYTHONPATH": "/Pfad/zu/pp-mcp",
-        "MCP_TRANSPORT": "stdio",
-        "PP_FILE_PATH": "/Pfad/zur/datei.portfolio"
-      }
-    }
-  }
-}
-```
-
-`args`/`PYTHONPATH` sind hier wichtig: `-m src.main` (nicht `src/main.py` als
-einfaches Skript), mit `PYTHONPATH` auf das Repo-Root, damit das `src`-Package
-aufgelöst wird. Claude Desktop berücksichtigt in dieser Config **kein** `cwd`-Feld
-(bestätigt: ein gesetztes `cwd` wird stillschweigend ignoriert), `PYTHONPATH` ist
-daher der einzige verlässliche Weg — ohne das gibt es
-`ModuleNotFoundError: No module named 'src'`. `command` muss der Python-Interpreter
-sein, der `requirements.txt` installiert hat (der `python3` eines venvs, falls
-verwendet) — Claude Desktop erbt nicht das venv der Shell.
-
-Für Multi-Source `PP_PORTFOLIOS_CONFIG` in `env` statt `PP_FILE_PATH` setzen.
-
-**Alternative: `uv` statt einfachem `python3`/`PYTHONPATH`.** Wer
-[`uv`](https://docs.astral.sh/uv/) statt eines manuell angelegten venvs zur
-Verwaltung von Python-Installation/Dependencies nutzt, kann damit auch den
-`PYTHONPATH`-Workaround oben ersetzen — `uv --directory` wechselt selbst ins
-Repo-Verzeichnis, bevor der Befehl läuft, sodass das `src`-Package unabhängig
-davon aufgelöst wird, ob der Client `cwd` berücksichtigt:
-
-```bash
-uv python install 3.11
-cd /Pfad/zu/pp-mcp && uv venv --python 3.11 && uv pip install -r requirements.txt
-```
-
-```json
-{
-  "mcpServers": {
-    "pp-mcp": {
-      "command": "/absoluter/Pfad/zu/uv",
-      "args": [
-        "--directory", "/Pfad/zu/pp-mcp",
-        "run", "--no-project", "python", "-m", "src.main"
-      ],
-      "env": {
-        "MCP_TRANSPORT": "stdio",
-        "PP_FILE_PATH": "/Pfad/zur/datei.portfolio"
-      }
-    }
-  }
-}
-```
-
-Den absoluten Pfad aus `command -v uv` verwenden — grafische Anwendungen wie
-Claude Desktop übernehmen den `PATH` der Shell möglicherweise nicht.
-`--no-project` behält `requirements.txt`/`uv pip install` als Abhängigkeitsquelle
-bei und verhindert, dass ein fremdes `pyproject.toml` aus einem übergeordneten
-Verzeichnis erkannt wird.
-
-## Andere MCP-Clients/KI-Assistenten verwenden
-
-`pp-mcp` ist nicht auf Claude beschränkt — es ist ein Standard-MCP-Server, den jeder
-MCP-kompatible Client bzw. KI-Assistent nutzen kann, entweder über `stdio` (Client
-startet ihn direkt, siehe oben) oder über den `streamable-http`-Transport mit
-gewöhnlichen MCP-Tool-Definitionen für Clients, die entfernte HTTP-MCP-Server
-unterstützen (z.B. andere LLM-Chat-Apps, IDE-Integrationen, Agent-Frameworks). Den
-Client auf `http://<host>:<port>/mcp` zeigen lassen und, falls `MCP_AUTH_TOKEN`
-gesetzt ist, den HTTP-Header `Authorization: Bearer <MCP_AUTH_TOKEN>` mitgeben — in
-der Doku des jeweiligen Clients nachsehen, wie er entfernte MCP-Server einrichtet
-(manche, wie Claude Desktop oben, starten direkt nur lokale stdio-Server und
-brauchen eine stdio-zu-HTTP-Bridge wie `mcp-remote`).
-
-## Portfolio-Datei umschalten (macOS)
-
-Wer mehrere `.portfolio`-Dateien verwaltet, kann mit `switch-portfolio.sh` schnell
-zwischen ihnen wechseln. Das Skript setzt `PP_FILE_PATH` in der `.env` und startet den
-Server neu — bei lokalem Betrieb über den launchd-Dienst `de.pp-mcp.server`:
-
-```bash
-./switch-portfolio.sh --list                                   # aktive Dateien anzeigen
-./switch-portfolio.sh /Users/du/Portfolios/Depot.portfolio     # umschalten + Neustart
-```
-
-`--list` blendet Backups (`*.backup*`) und Konflikt-Kopien (`*conflicted*`) aus.
-Die Pfade (`APP_DIR`, `PORTFOLIO_DIR`, `SERVICE`) stehen als Konstanten oben im Skript.
-
-**macOS-Kurzbefehl:** Ein Kurzbefehl mit Auswahlmenü lässt sich in vier Aktionen bauen —
-„Shell-Skript ausführen" (`switch-portfolio.sh --list`) → „Text teilen" (bei Neue Zeilen)
-→ „Aus Liste auswählen" → „Shell-Skript ausführen" mit dem gewählten Pfad als Argument
-(`switch-portfolio.sh "$1"`). So wird das Depot per Klick, Tastenkürzel oder Siri gewechselt.
-
-## Konfiguration (Umgebungsvariablen)
-
-| Variable | Default | Bedeutung |
-|----------|---------|-----------|
-| `PP_FILE_PATH` | – | Pfad zur `.portfolio`-Datei (Single-Source-Fallback, im Container `/data/portfolio.portfolio`). Ignoriert, wenn `PP_PORTFOLIOS_CONFIG` gesetzt ist. |
-| `PP_PASSWORD` | leer | Passwort für verschlüsselte Dateien (Single-Source). |
-| `PP_PORTFOLIOS_CONFIG` | leer | Pfad zur JSON-Konfiguration mehrerer Portfolio-Quellen (Multi-Source, siehe oben). Hat Vorrang vor `PP_FILE_PATH`/`PP_PASSWORD`. |
-| `MCP_TRANSPORT` | `streamable-http` | `streamable-http`, `sse` oder `stdio` (Betrieb auf Abruf, kein residenter HTTP-Server; siehe [oben](#in-claude-einrichten)). |
-| `MCP_SERVER_HOST` | `127.0.0.1` | Interface, an das HTTP-Transporte binden; bei stdio unbenutzt. Docker-Deployments setzen dies auf `0.0.0.0` (bereits in `docker-compose*.yml` gesetzt), damit der Container über das Port-Mapping erreichbar ist. Bei lokalem Betrieb ohne Docker nur auf `0.0.0.0` setzen, wenn LAN-Erreichbarkeit wirklich nötig ist, und dabei `MCP_AUTH_TOKEN` verwenden. |
-| `MCP_SERVER_PORT` | `8080` | Port für HTTP-Transporte (einschließlich Docker); bei stdio unbenutzt. |
-| `MCP_AUTH_TOKEN` | leer | Optionaler Bearer-Token; leer = keine Auth. **Pflicht**, sobald der Server außerhalb eines vertrauenswürdigen lokalen Netzes erreichbar ist. |
-| `MCP_REQUIRE_AUTH` | `false` | Bei HTTP-Transporten bricht der Server-Start ab, wenn dieser Wert `true` und `MCP_AUTH_TOKEN` leer ist. In `docker-compose.yml` (Produktivbetrieb) auf `true` gesetzt; bei stdio ignoriert. |
 
 ## Aufbau
 
