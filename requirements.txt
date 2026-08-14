@@ -1,5 +1,5 @@
 # MCP framework
-mcp>=1.2.0
+mcp>=1.27.0,<2
 uvicorn>=0.23.0
 
 # Price feed fetching (ariva.de, for refresh_prices)
