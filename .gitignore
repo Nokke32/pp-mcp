@@ -28,6 +28,7 @@ portfolios.json
 # sync-claude-md.sh direkt auf Gitea gepflegt (nicht ueber git-Commits,
 # damit sie nie ueber main -> github-main auf GitHub landen kann)
 CLAUDE.md
+sync-claude-md.sh
 
 # IDE / OS
 .idea/
